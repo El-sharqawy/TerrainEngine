@@ -57,7 +57,7 @@ A modern real-time 3D terrain rendering engine built with OpenGL 4.6, GLFW, and 
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/TerrainEngine.git
+git clone https://github.com/El-sharqawy/TerrainEngine.git
 
 Enter TerrainEngine, and Open TerrainEngine.sln in Visual Studio
 
