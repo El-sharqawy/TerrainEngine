@@ -1,4 +1,0 @@
-D:/MyNewProjects/GameWorld/Extern/meshoptimizer-master/CMakeFiles/meshoptimizer.dir
-D:/MyNewProjects/GameWorld/Extern/meshoptimizer-master/CMakeFiles/INSTALL.dir
-D:/MyNewProjects/GameWorld/Extern/meshoptimizer-master/CMakeFiles/ALL_BUILD.dir
-D:/MyNewProjects/GameWorld/Extern/meshoptimizer-master/CMakeFiles/ZERO_CHECK.dir
