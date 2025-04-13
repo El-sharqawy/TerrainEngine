@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\MyNewProjects\GameWorld\Extern\meshoptimizer-master\CMakeFiles\941b12a87c6491c3d0c1729b0f1d70c2\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{AE5C9094-BAC4-34B3-AE96-2345744019FA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
