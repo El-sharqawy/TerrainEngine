@@ -10,12 +10,25 @@ CSkyBox::CSkyBox(CWindow* pWindow)
 	m_v3SkyColorBottom = SVector3Df(0.9f, 0.9f, 0.95f);
 
 	m_pSkyboxScreenSpace = new CScreenSpaceShader("shaders/skybox.frag", "SkyBoxShader");
-	m_pSkyBoxNewFBO = new CFrameBuffer();
-	m_pSkyBoxNewFBO->InitSkyBox(pWindow->GetWidth(), pWindow->GetHeight());
+	SSceneElements* scene = CObject::pScene;
+	if (!scene)
+	{
+		sys_err("CSkyBox::Render: Scene Is NULL!!");
+		return;
+	}
+
+	m_pSkyBoxNew = scene->pSceneFBO;
 
 	m_pWindow = pWindow;
 
 	m_bManualOverride = true;
+	m_bIsNight = false;
+
+	m_fStarDensity = m_fStarBrightness = 1.0f;
+
+	m_fSunSizeDay = 0.9999f;    // bigger sun
+	m_fSunSizeNight = 0.9990f;  // smaller sun
+	m_fSunCoreIntensity = 2.0f;
 
 	SunsetPresetTwo();
 	DefaultPreset();
@@ -29,9 +42,9 @@ void CSkyBox::Render()
         sys_err("CSkyBox::Render: Scene Is NULL!!");
         return;
     }
+	m_pSkyBoxNew->BindForWriting();
 
-	m_pSkyBoxNewFBO->BindForWriting();
-
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE); // Ensure culling doesn’t interfere
 	glDisable(GL_BLEND); // Disable blending to avoid transparency issues
@@ -49,22 +62,30 @@ void CSkyBox::Render()
     m_pSkyboxScreenSpace->GetShader().setVec3("v3SkyColorTop", m_v3SkyColorTop);
     m_pSkyboxScreenSpace->GetShader().setVec3("v3SkyColorBottom", m_v3SkyColorBottom);
 
-	m_pSkyboxScreenSpace->GetShader().setInt("screenTexture", 0);  // Set the uniform to use texture unit 0
+	float currentTime = static_cast<float>(glfwGetTime());
+	m_pSkyboxScreenSpace->GetShader().setFloat("fTime", currentTime);
+	m_pSkyboxScreenSpace->GetShader().setBool("bIsNight", m_bIsNight);
+	m_pSkyboxScreenSpace->GetShader().setFloat("fStarDensity", m_fStarDensity); // [0.5 - 3.0]
+	m_pSkyboxScreenSpace->GetShader().setFloat("fStarBrightness", m_fStarBrightness); // [0.1 - 2.0]
+	m_pSkyboxScreenSpace->GetShader().setFloat("fSunSizeNight", m_fSunSizeNight); // [0.9990 - 0.9999]
+	m_pSkyboxScreenSpace->GetShader().setFloat("fSunSizeDay", m_fSunSizeDay); // [0.9990 - 0.9999]
+	m_pSkyboxScreenSpace->GetShader().setFloat("fSunCoreIntensity", m_fSunCoreIntensity); // [0.1 - 3.0]
 
 	// Render to framebuffer
 	m_pSkyboxScreenSpace->Render();
 
 	// Blit the FBO’s color buffer into the default framebuffer
-	m_pSkyBoxNewFBO->BindToDefaultBuffer();
+	//m_pSkyBoxNew->BindToDefaultBuffer();
 
 	// Go back to default for further rendering
-	m_pSkyBoxNewFBO->UnBindWriting();
+	m_pSkyBoxNew->UnBindWriting();
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND); // Disable blending to avoid transparency issues
 }
 
 void CSkyBox::SetGUI()
 {
-	ImGui::Begin("SkyBox Controls: ");
-	ImGui::TextColored(ImVec4(1, 1, 0, 1), "Sky colors controls");
 	if (ImGui::ColorEdit3("Sky Top Color", (float*)&m_v3SkyColorTop))		// Edit 3 floats representing a color
 	{
 		m_bManualOverride = true;
@@ -74,11 +95,45 @@ void CSkyBox::SetGUI()
 		m_bManualOverride = true;
 	}
 
+	bool changed = ImGui::Checkbox("Night mode", &m_bIsNight);
+
+	if (changed)
+	{
+		if (m_bIsNight)
+		{
+			m_v3SkyColorTop = SVector3Df(14, 31, 82) / 255.0f;
+			m_v3SkyColorBottom = SVector3Df(1, 16, 73) / 255.0f;
+		}
+		else
+		{
+			m_v3SkyColorTop = SVector3Df(0.5f, 0.7f, 0.8f) * 1.05f;
+			m_v3SkyColorBottom = SVector3Df(0.9f, 0.9f, 0.95f);
+		}
+
+	}
+
+	if (m_bIsNight)
+	{
+		ImGui::SliderFloat("Star Density", &m_fStarDensity, 0.5f, 3.0f);
+		ImGui::SliderFloat("Star Brightness", &m_fStarBrightness, 0.1f, 2.0f);
+		ImGui::SliderFloat("Moon Size", &m_fSunSizeNight, 0.990f, 0.999f);
+	}
+	else
+	{
+		ImGui::SliderFloat("Sun Size", &m_fSunSizeDay, 0.990f, 0.999f);
+	}
+
+	ImGui::SliderFloat("Sun Core Intense", &m_fSunCoreIntensity, 0.1f, 3.0f);
+
 	// A button to return to AUTO Original Color Mode
 	if (ImGui::Button("Reset to Auto"))
+	{
 		m_bManualOverride = false;
-
-	ImGui::End();
+		m_fStarDensity = m_fStarBrightness = 1.0f;
+		m_fSunSizeDay = 0.9999f;    // Increased from 0.995 (smaller sun)
+		m_fSunSizeNight = 0.9995f;  // Increased from 0.999 (smaller sun)
+		m_fSunCoreIntensity = 2.0f;
+	}
 }
 
 void CSkyBox::Update()
@@ -155,10 +210,6 @@ void CSkyBox::MixSkyColorPresets(GLfloat fVal, const TColorPreset& p1, const TCo
 
 CSkyBox::~CSkyBox()
 {
-	delete m_pSkyboxScreenSpace;
-	if (m_pSkyBoxNewFBO)
-	{
-		delete m_pSkyBoxNewFBO;
-	}
+	safe_delete(m_pSkyboxScreenSpace);
 }
 

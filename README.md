@@ -48,7 +48,6 @@ A modern real-time 3D terrain rendering engine built with OpenGL 4.6, GLFW, and 
 
 ### Dependencies
 - Visual Studio 2022
-- Conan 2.0+ (package manager)
 - GLFW 3.3
 - GLM 0.9.9+
 - OpenGL 4.6 compatible GPU

@@ -1,0 +1,52 @@
+/*void main()
+{
+    float height = v3WorldPos.y;
+    vec3 NormalsNorm = normalize(v3Normal);
+
+    // Diffuse lighting
+    float fDiffuse = max(0.0, dot(NormalsNorm, -v3LightDirection));
+    // Specular lighting (Blinn-Phong)
+    vec3 viewDir = normalize(v3CameraPosition - v3WorldPos);
+    vec3 halfVec = normalize(-v3LightDirection + viewDir);
+    float fSpecular = pow(max(dot(NormalsNorm, halfVec), 0.0), fShininess);
+
+    // Base color from height
+    vec3 baseColor = HeightToColor(height);
+
+    // Shadow calculation
+    // Height-dependent shadow threshold (higher terrain has stricter shadow conditions)
+    float shadowThreshold = mix(0.0, 0.5, height / 500.0); // Threshold increases with height
+    float shadowFactor = smoothstep(shadowThreshold - 0.1, shadowThreshold + 0.1, fDiffuse);
+    // Shadow color (darkened base color)
+    vec3 shadowColor = baseColor * 0.2; // Darker in shadow
+
+    // Lighting terms
+    vec3 ambientTerm = v3AmbientColor * baseColor;
+    vec3 diffuseTerm = v3LightColor * fDiffuse * baseColor;
+    vec3 specularTerm = v3LightColor * fSpecular * baseColor;
+    vec3 litColor = ambientTerm + diffuseTerm + specularTerm;
+
+    // Combine lit and shadowed colors
+    //vec3 finalColor = mix(shadowColor, baseColor, shadowFactor);
+
+    vec4 finalColor = texture(textures[iBaseTextureIndex], v2TexCoord);
+
+    // Hit effect (brush circle)
+    if (u_HasHit)
+    {
+        float dist = length(v3WorldPos.xz - u_HitPosition.xz);
+        float edge = 2.0;
+        float circle = 1.0 - smoothstep(u_HitRadius - edge, u_HitRadius, dist);
+        float thickness = 1.0;
+        float ring = smoothstep(u_HitRadius - thickness, u_HitRadius, dist) * 
+                     (1.0 - smoothstep(u_HitRadius, u_HitRadius + thickness, dist));
+
+        vec3 circleColor = mix(finalColor.xyz, vec3(1.0, 0.2, 0.2), ring);
+        FragColor = vec4(circleColor, 1.0);
+    }
+    else
+    {
+        FragColor = vec4(finalColor);
+    }
+}*/
+

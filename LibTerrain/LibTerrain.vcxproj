@@ -150,26 +150,30 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="source\midpoint_terrain.cpp" />
-    <ClCompile Include="source\quad_list.cpp" />
+    <ClCompile Include="source\clouds_object.cpp" />
+    <ClCompile Include="source\geomip_grid.cpp" />
+    <ClCompile Include="source\lod_manager.cpp" />
     <ClCompile Include="source\screen_space_shader.cpp" />
     <ClCompile Include="source\simple_water.cpp" />
     <ClCompile Include="source\skybox.cpp" />
     <ClCompile Include="source\skybox_framebuffer.cpp" />
     <ClCompile Include="source\stdafx.cpp" />
     <ClCompile Include="source\terrain.cpp" />
+    <ClCompile Include="source\texture_set.cpp" />
     <ClCompile Include="source\triangle_list.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="source\midpoint_terrain.h" />
+    <ClInclude Include="source\clouds_object.h" />
+    <ClInclude Include="source\geomip_grid.h" />
+    <ClInclude Include="source\lod_manager.h" />
     <ClInclude Include="source\object.h" />
-    <ClInclude Include="source\quad_list.h" />
     <ClInclude Include="source\screen_space_shader.h" />
     <ClInclude Include="source\simple_water.h" />
     <ClInclude Include="source\skybox.h" />
     <ClInclude Include="source\skybox_framebuffer.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\terrain.h" />
+    <ClInclude Include="source\texture_set.h" />
     <ClInclude Include="source\triangle_list.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

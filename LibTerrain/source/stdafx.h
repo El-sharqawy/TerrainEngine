@@ -10,8 +10,8 @@
 #include "../../LibMath/source/stdafx.h"
 #include "../../LibGL/source/stdafx.h"
 #include "../../LibGL/source/window.h"
+#include "../../LibGame/source/CommonDefines.h"
 
-#include <glad/glad.h>
 #include <cmath>
 
 #undef min
@@ -32,9 +32,20 @@
 #define COLOR_TEXTURE_UNIT_INDEX_2 2
 #define COLOR_TEXTURE_UNIT_3 GL_TEXTURE3
 #define COLOR_TEXTURE_UNIT_INDEX_3 3
-
-#define HEIGHT_MAP_TEXTURE_UNIT       GL_TEXTURE4
-#define HEIGHT_MAP_TEXTURE_UNIT_INDEX 4
+#define COLOR_TEXTURE_UNIT_4 GL_TEXTURE4
+#define COLOR_TEXTURE_UNIT_INDEX_4 4
+#define COLOR_TEXTURE_UNIT_5 GL_TEXTURE5
+#define COLOR_TEXTURE_UNIT_INDEX_5 5
+#define COLOR_TEXTURE_UNIT_6 GL_TEXTURE6
+#define COLOR_TEXTURE_UNIT_INDEX_6 6
+#define COLOR_TEXTURE_UNIT_7 GL_TEXTURE7
+#define COLOR_TEXTURE_UNIT_INDEX_7 7
+#define COLOR_TEXTURE_UNIT_8 GL_TEXTURE8
+#define COLOR_TEXTURE_UNIT_INDEX_8 8
+#define COLOR_TEXTURE_UNIT_9 GL_TEXTURE9
+#define COLOR_TEXTURE_UNIT_INDEX_9 9
+#define COLOR_TEXTURE_UNIT_10 GL_TEXTURE10
+#define COLOR_TEXTURE_UNIT_INDEX_10 10
 
 // Water shader
 #define REFLECTION_TEXTURE_UNIT       GL_TEXTURE4

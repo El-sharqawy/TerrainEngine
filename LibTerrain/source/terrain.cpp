@@ -1,147 +1,141 @@
 #include "stdafx.h"
 #include "terrain.h"
+#include "../../LibImageUI/imgui.h"
+#include "../../LibImageUI/ImGuiFileDialog.h"
+#include "../../LibImageUI/ImGuiFileDialogConfig.h"
 
-CBaseTerrain::CBaseTerrain() : m_fHeightMapGrid()
+CTerrainTextureSet* CBaseTerrain::ms_pTerrainTextureSet = nullptr;
+
+CBaseTerrain::CBaseTerrain()
 {
-	m_iTerrainSize = 0;
-	m_iNumPatches = 0;
+	m_pMapGrid = new CGrid<float>();
+	m_pGeoMapGrid = new CGeoMipGrid();
+	m_pTerrainShader = new CShader("TerrainShader");
+	m_pWorldTranslation = new CWorldTranslation();
+
+	m_iTerrainSize = 32;
+	m_iPatchSize = 1;
 	m_fWorldScale = 1.0f;
 	m_fTextureScale = 1.0f;
-	arr_mem_zero(m_pTextures);
 
-	m_fMinHeight = 0.0f;
-	m_fMaxHeight = 0.0f;
-	m_pTerrainShader = new CShader("TerrainShader");
-	m_v3LightDir = SVector3Df(1.0f);
-	m_fCameraHeight = 50.0f;
+	m_v3LightDir = SVector3Df(0.0f, 1.0f, 1.0f);
+
+	m_iSelectedBtnIdx = 0;
+
+	InitializeShaders();
 }
 
 CBaseTerrain::~CBaseTerrain()
 {
-	delete m_pTerrainShader;
-	m_pTerrainShader = nullptr;
+	safe_delete(m_pMapGrid);
+	safe_delete(m_pGeoMapGrid);
+	safe_delete(m_pTerrainShader);
+	safe_delete(m_pWorldTranslation);
 
-	Destroy();
-}
-
-void CBaseTerrain::Destroy()
-{
-	m_fHeightMapGrid.Destroy();
-	m_gQuadList.Destroy();
-}
-
-bool CBaseTerrain::InitializeTerrain(const float fWorldScale, const float fTextureScale, const std::vector<std::string>& vTexturesNames)
-{
-	InitializeShaders();
-
-	if (vTexturesNames.size() != arr_size(m_pTextures))
+	if (m_uiTerrainHandlesSSBO)
 	{
-		sys_err("Failed to Initialize Terrains Textures given textures(%zu) not equal to the actual array (%zu)", vTexturesNames.size(), arr_size(vTexturesNames));
-		return false;
+		glDeleteBuffers(1, &m_uiTerrainHandlesSSBO);
 	}
+}
 
+void CBaseTerrain::InitializeTerrain(GLint iTerrainSize, GLint iPatchSize, GLfloat fWorldScale, GLfloat fTextureScale)
+{
+	m_iTerrainSize = iTerrainSize;
+	m_iPatchSize = iPatchSize;
 	m_fWorldScale = fWorldScale;
 	m_fTextureScale = fTextureScale;
 
-	for (GLint i = 0; i < arr_size(m_pTextures); i++)
-	{
-		m_pTextures[i] = new CTexture();
-		m_pTextures[i]->Load(vTexturesNames[i]);
-	}
+	m_pWorldTranslation->SetScale(fWorldScale);
 
-	return true;
+	m_pMapGrid->InitGrid(m_iTerrainSize, m_iTerrainSize, 0.0f);
+	m_pGeoMapGrid->CreateGeoMipGrid(m_iTerrainSize, m_iTerrainSize, m_iPatchSize, this);
 }
 
 void CBaseTerrain::InitializeShaders()
 {
-	m_pTerrainShader->AttachShader("shaders/terrain.vert");
-	m_pTerrainShader->AttachShader("shaders/terrain.tcs");
-	m_pTerrainShader->AttachShader("shaders/terrain.tes");
-	m_pTerrainShader->AttachShader("shaders/terrain.frag");
+	m_pTerrainShader->AttachShader("shaders/terrain/terrain.vert");
+	m_pTerrainShader->AttachShader("shaders/terrain/terrain.tcs");
+	m_pTerrainShader->AttachShader("shaders/terrain/terrain.tes");
+	m_pTerrainShader->AttachShader("shaders/terrain/terrain.frag");
 	m_pTerrainShader->LinkPrograms();
-
-	m_pTerrainShader->Use();
-	m_pTerrainShader->setInt("TextureHeight0", COLOR_TEXTURE_UNIT_INDEX_0);
-	m_pTerrainShader->setInt("TextureHeight1", COLOR_TEXTURE_UNIT_INDEX_1);
-	m_pTerrainShader->setInt("TextureHeight2", COLOR_TEXTURE_UNIT_INDEX_2);
-	m_pTerrainShader->setInt("TextureHeight3", COLOR_TEXTURE_UNIT_INDEX_3);
-	m_pTerrainShader->setInt("HeightMapTex", HEIGHT_MAP_TEXTURE_UNIT_INDEX);
 }
 
-void CBaseTerrain::LoadFromFile(const std::string& sFileName)
+GLfloat CBaseTerrain::GetWorldScale() const
 {
-	if (m_iNumPatches == 0)
-	{
-		sys_err("CBaseTerrain::LoadFromFile: cannot Load Height Map File %s, No Patches Numbers!", sFileName.c_str());
-		return;
-	}
-
-	LoadHeightMapFile(sFileName);
-	m_gQuadList.CreateQuadList(m_iNumPatches, m_iNumPatches, this);
+	return (m_fWorldScale);
 }
 
-void CBaseTerrain::SaveToFile(const std::string& sFileName)
+GLfloat CBaseTerrain::GetTextureScale() const
 {
-	unsigned char* ptr = (unsigned char*)malloc(m_iTerrainSize * m_iTerrainSize);
-
-	if (!ptr)
-	{
-		sys_err("CBaseTerrain::SaveToFile: %s Failed To Allocate %u bytes using Malloc", sFileName.c_str(), m_iTerrainSize * m_iTerrainSize);
-		return;
-	}
-
-	float* pSrc = m_fHeightMapGrid.GetBaseAddr();
-
-	float fDelta = m_fMaxHeight - m_fMinHeight;
-
-	for (GLint i = 0; i < m_iTerrainSize * m_iTerrainSize; i++)
-	{
-		float f = (pSrc[i] - m_fMinHeight) / fDelta;
-		ptr[i] = (unsigned char)(f * 255.0f);
-	}
-
-	stbi_write_png(sFileName.c_str(), m_iTerrainSize, m_iTerrainSize, 0, ptr, m_iTerrainSize);
-	safe_free(ptr);
+	return (m_fTextureScale);
 }
 
-void CBaseTerrain::SetTexture(CTexture* pTexture, GLint iIndex)
+GLfloat CBaseTerrain::GetHeight(GLint iX, GLint iZ) const
 {
-	if (iIndex >= arr_size(m_pTextures))
-	{
-		sys_err("Cannot Set Textures, Index %d out of range!", iIndex);
-		return;
-	}
-
-	m_pTextures[iIndex] = pTexture;
+	return (m_pMapGrid->Get(iX, iZ));
 }
 
-void CBaseTerrain::SetMinHeight(const float fVal)
+GLint CBaseTerrain::GetSize() const
 {
-	m_fMinHeight = fVal;
+	return (m_iTerrainSize);
 }
 
-void CBaseTerrain::SetMaxHeight(const float fVal)
+GLint CBaseTerrain::GetPatchSize() const
 {
-	m_fMaxHeight = fVal;
+	return (m_iPatchSize);
 }
 
-void CBaseTerrain::SetMinMaxHeight(const float fMinVal, const float fMaxVal)
+GLint CBaseTerrain::GetWidth() const
 {
-	m_fMinHeight = fMinVal;
-	m_fMaxHeight = fMaxVal;
+	return (m_pMapGrid->GetWidth());
 }
 
-void CBaseTerrain::SetTexturesHeights(const float fTexHeight0, const float fTexHeight1, const float fTexHeight2, const float fTexHeight3)
+GLint CBaseTerrain::GetDepth() const
 {
-	m_pTerrainShader->Use();
-	m_pTerrainShader->setFloat("fTexHeight0", fTexHeight0);
-	m_pTerrainShader->setFloat("fTexHeight1", fTexHeight1);
-	m_pTerrainShader->setFloat("fTexHeight2", fTexHeight2);
-	m_pTerrainShader->setFloat("fTexHeight3", fTexHeight3);
-
+	return (m_pMapGrid->GetDepth());
 }
 
-void CBaseTerrain::SetLightDir(const SVector3Df& v3LightDir)
+CGrid<GLfloat>* CBaseTerrain::GetMapGrid()
+{
+	return (m_pMapGrid);
+}
+
+CShader* CBaseTerrain::GetTerrainShader()
+{
+	return (m_pTerrainShader);
+}
+
+CGeoMipGrid* CBaseTerrain::GetGeoMipGrid()
+{
+	return (m_pGeoMapGrid);
+}
+
+CWorldTranslation* CBaseTerrain::GetWorldTranslation()
+{
+	return (m_pWorldTranslation);
+}
+
+std::vector<CGeoMipGrid::TVertex>& CBaseTerrain::GetVertices() const
+{
+	return (m_pGeoMapGrid->GetVertices());
+}
+
+std::vector<GLuint>& CBaseTerrain::GetIndices() const
+{
+	return (m_pGeoMapGrid->GetIndices());
+}
+
+std::vector<TLodInfo>& CBaseTerrain::GetLodInfo() const
+{
+	return (m_pGeoMapGrid->GetLodInfo());
+}
+
+void CBaseTerrain::UpdateVertexBuffer()
+{
+	GetGeoMipGrid()->UpdateVertexBuffer();
+}
+
+void CBaseTerrain::SetLightDirection(const SVector3Df& v3LightDir)
 {
 	m_v3LightDir = v3LightDir;
 	m_pTerrainShader->Use();
@@ -150,9 +144,104 @@ void CBaseTerrain::SetLightDir(const SVector3Df& v3LightDir)
 	m_pTerrainShader->setVec3("v3LightDirection", ReversedLightDir);
 }
 
-float CBaseTerrain::GetHeight(GLint iX, GLint iZ) const
+void CBaseTerrain::Render()
 {
-	return (m_fHeightMapGrid.Get(iX, iZ));
+	auto rCamera = CCameraManager::Instance().GetCurrentCamera();
+
+	// Bind SSBO to index 0
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_uiTerrainHandlesSSBO);
+
+	// Render geometry
+	m_pGeoMapGrid->Render(rCamera->GetPosition(), rCamera->GetViewProjMatrix());
+
+	// Unbind SSBO from index 0
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0); // Critical for safety
+}
+
+void CBaseTerrain::Update()
+{
+	auto rCamera = CCameraManager::Instance().GetCurrentCamera();
+
+	CMatrix4Df matVewProj = rCamera->GetViewProjMatrix();
+	CMatrix4Df matView = rCamera->GetMatrix();
+
+	SSceneElements* scene = CObject::pScene;
+	m_v3LightDir = scene->v3LightDir;
+
+	m_pTerrainShader->Use();
+
+	// Vertex Shader
+	m_pTerrainShader->setMat4("ViewMatrix", matVewProj);
+
+	// Tessellation Control Shader
+	m_pTerrainShader->setVec3("v3CameraPos", scene->pCamera->GetPosition());
+	m_pTerrainShader->setFloat("fTessMultiplier", 0.5f);
+
+	// Tessellation Evaluation Shader
+	m_pTerrainShader->setMat4("mat4ViewProj", matVewProj);
+	m_pTerrainShader->setVec3("v3CameraPos", scene->pCamera->GetPosition());
+	SVector3Df v3PlaneNormal(0.0f, 1.0f, 0.0f);
+	SVector3Df v3PointOnPlane(0.0f, 0.0f, 0.0f);
+	float fDot = -v3PlaneNormal.dot(v3PointOnPlane);
+	m_pTerrainShader->setVec4("v4ClipPlane", v3PlaneNormal.x, v3PlaneNormal.y, v3PlaneNormal.z, fDot);
+
+	// Fragment Shader
+	m_pTerrainShader->setVec3("v3LightDirection", scene->v3LightDir);
+	m_pTerrainShader->setVec3("v3LightColor", scene->v3LightColor);
+	m_pTerrainShader->setVec3("v3AmbientColor", SVector3Df(0.5f));
+	m_pTerrainShader->setVec3("v3CameraPosition", scene->pCamera->GetPosition());
+	m_pTerrainShader->setFloat("fShininess", 0.2f);
+}
+
+void CBaseTerrain::SetGUI()
+{
+
+}
+
+void CBaseTerrain::SetTextureSet(CTerrainTextureSet* pTextureSet)
+{
+	static CTerrainTextureSet s_EmptyTextureSet;
+
+	if (pTextureSet)
+	{
+		ms_pTerrainTextureSet = pTextureSet;
+	}
+	else
+	{
+		sys_err("CBaseTerrain::SetTextureSet: Passed an Empty Textureset!");
+		ms_pTerrainTextureSet = &s_EmptyTextureSet;
+	}
+
+}
+
+CTerrainTextureSet* CBaseTerrain::GetTextureSet()
+{
+	if (!ms_pTerrainTextureSet)
+	{
+		SetTextureSet(nullptr);
+	}
+
+	return (ms_pTerrainTextureSet);
+}
+
+size_t CBaseTerrain::GetTexturesCount() const
+{
+	return (ms_pTerrainTextureSet->GetTexturesCount());
+}
+
+const TTerrainTexture& CBaseTerrain::GetTerrainTexture(size_t iIndex) const
+{
+	return (ms_pTerrainTextureSet->GetTexture(iIndex));
+}
+
+void CBaseTerrain::AddTerrainTexture(const TTerrainTexture& terrainTex) const
+{
+	ms_pTerrainTextureSet->AddTexture(terrainTex);
+}
+
+void CBaseTerrain::SetCurrentTexture(size_t iIndex)
+{
+	ms_pTerrainTextureSet->GetTexture(iIndex);
 }
 
 float CBaseTerrain::GetHeightInterpolated(GLfloat fX, GLfloat fZ) const
@@ -175,47 +264,23 @@ float CBaseTerrain::GetHeightInterpolated(GLfloat fX, GLfloat fZ) const
 
 	const float fFactorZ = fZ - std::floor(fZ);
 
-	const float fFinalHeight = (fInterpolatedTop - fInterpolatedBottom) * fFactorZ - fInterpolatedBottom;
+	const float fFinalHeight = (fInterpolatedTop - fInterpolatedBottom) * fFactorZ + fInterpolatedBottom;
 
 	return (fFinalHeight);
 }
 
-float CBaseTerrain::GetWorldScale() const
-{
-	return (m_fWorldScale);
-}
-
 float CBaseTerrain::GetWorldSize() const
 {
-	return (cast_floati(m_iNumPatches) * m_fWorldScale);
+	return (cast_floati(GetSize()) * m_fWorldScale);
 }
 
+/* Get Height by X - Z In World */
 float CBaseTerrain::GetWorldHeight(GLfloat fX, GLfloat fZ) const
 {
 	const float fHeightMapX = fX / GetWorldScale();
 	const float fHeightMapZ = fZ / GetWorldScale();
 
 	return (GetHeightInterpolated(fHeightMapX, fHeightMapZ));
-}
-
-float CBaseTerrain::GetTextureScale() const
-{
-	return (m_fTextureScale);
-}
-
-float CBaseTerrain::GetMinHeight() const
-{
-	return (m_fMinHeight);
-}
-
-float CBaseTerrain::GetMaxHeight() const
-{
-	return (m_fMaxHeight);
-}
-
-GLint CBaseTerrain::GetSize() const
-{
-	return (m_iTerrainSize);
 }
 
 SVector3Df CBaseTerrain::ConstrainCameraToTerrain()
@@ -243,7 +308,7 @@ SVector3Df CBaseTerrain::ConstrainCameraToTerrain()
 		v3NewCamPos.z = GetWorldSize() - 0.5f;
 	}
 
-	v3NewCamPos.y = GetWorldHeight(v3CamPos.x, v3CamPos.z) + m_fCameraHeight;
+	v3NewCamPos.y = GetWorldHeight(v3CamPos.x, v3CamPos.z) + 35.0f;
 	float fSmoothHeight = std::sinf(v3CamPos.x * 4.0f) + std::cosf(v3CamPos.z * 4.0f);
 	fSmoothHeight /= 35.0f;
 
@@ -254,199 +319,31 @@ SVector3Df CBaseTerrain::ConstrainCameraToTerrain()
 	return (v3NewCamPos);
 }
 
-bool CBaseTerrain::LoadHeightMapFile(const std::string& sFileName)
+void CBaseTerrain::LoadTextureSet(const std::string& stFileName)
 {
-	GLint iFileSize = 0;
-	unsigned char* p = (unsigned char*)ReadBinaryFile(sFileName.c_str(), iFileSize);
-
-	if (iFileSize % sizeof(float) != 0)
-	{
-		sys_err("CBaseTerrain::LoadHeightMapFile: %s does not contain an whole number of floats (size %d)", sFileName.c_str(), iFileSize);
-		return false;
-	}
-
-	m_iTerrainSize = static_cast<GLint>(std::sqrtf(static_cast<float>(iFileSize) / static_cast<float>(sizeof(float))));
-
-	sys_log("CBaseTerrain::LoadHeightMapFile: Terrain Size: %d", m_iTerrainSize);
-
-	if ((m_iTerrainSize * m_iTerrainSize) != (iFileSize % sizeof(float)))
-	{
-		sys_err("CBaseTerrain::LoadHeightMapFile: %s does not contain a square height map - size %d", sFileName.c_str(), iFileSize);
-		return false;
-	}
-
-	m_fHeightMapGrid.InitGrid(m_iTerrainSize, m_iTerrainSize, (float*)p);
-
-	return (true);
+	ms_pTerrainTextureSet->Load(stFileName);
 }
 
-void CBaseTerrain::Finalize()
+void CBaseTerrain::DoBindlesslyTexturesSetup()
 {
-	m_gQuadList.CreateQuadList(m_iNumPatches, m_iNumPatches, this);
-	m_gHeightMapTex.LoadF32(m_iTerrainSize, m_iTerrainSize, m_fHeightMapGrid.GetBaseAddr());
-	//m_gSimpleWater.Init(m_iTerrainSize, m_fWorldScale);
-}
+	m_vTextureHandles.clear();
 
-void CBaseTerrain::Render(const CCamera& rCamera)
-{
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
-	glFrontFace(GL_CCW);
-	glCullFace(GL_BACK);
-	RenderTerrain(rCamera);
-	//RenderWater(rCamera);
-}
-
-void CBaseTerrain::RenderTerrain(const CCamera& rCamera)
-{
-	CMatrix4Df matVewProj = rCamera.GetViewProjMatrix();
-	CMatrix4Df matView = rCamera.GetMatrix();
-
-	m_pTerrainShader->Use();
-	m_pTerrainShader->setMat4("mat4ViewProjection", matVewProj);
-	m_pTerrainShader->setMat4("mat4View", matView);
-
-	for (GLint i = 0; i < arr_size(m_pTextures); i++)
+	// Collect handles from loaded textures
+	for (auto& tex : ms_pTerrainTextureSet->GetTextures())
 	{
-		if (m_pTextures[i])
+		if (tex.m_pTexture)
 		{
-			m_pTextures[i]->Bind(COLOR_TEXTURE_UNIT_0 + i);
+			m_vTextureHandles.push_back(tex.m_pTexture->GetHandle()); // Assuming CTexture has GetHandle()
 		}
 	}
 
-	m_gHeightMapTex.Bind(HEIGHT_MAP_TEXTURE_UNIT);
+	// Create and fill SSBO
+	glGenBuffers(1, &m_uiTerrainHandlesSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uiTerrainHandlesSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, m_vTextureHandles.size() * sizeof(GLuint64), m_vTextureHandles.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_uiTerrainHandlesSSBO);
 
-	SVector3Df ReversedLightDir = m_v3LightDir * -1.0f;
-	ReversedLightDir = ReversedLightDir.normalize();
-
-	SSceneElements* scene = CObject::pScene;
-	m_v3LightDir = scene->v3LightDir;
-
-	m_pTerrainShader->setVec3("v3LightDir", scene->v3LightDir);
-	m_pTerrainShader->setVec3("v3LightColor", scene->v3LightColor);
-	glFrontFace(GL_CCW);
-	m_gQuadList.Render();
-	glFrontFace(GL_CW);
-
-	//RenderTerrainReflectionPass(rCamera);
-	//RenderTerrainRefractionPass(rCamera);
-	//RenderTerrainDefaultPass(rCamera);
+	// After creating SSBO
+	GLuint64* handles = static_cast<GLuint64*>(glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY));
+	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 }
-
-/*
-void CBaseTerrain::RenderTerrainReflectionPass(const CCamera& rCamera)
-{
-	m_gSimpleWater.StartReflectionPass();
-
-	CCamera UnderWaterCam = rCamera;
-
-	// Set the position of the camera to be under the water
-	const SVector3Df& v3CamPos = rCamera.GetPosition();
-	float fCamHeightAboveWater = v3CamPos.y - m_gSimpleWater.GetWaterHeight();
-	SVector3Df v3CamPosUnderWater = v3CamPos;
-	v3CamPosUnderWater.y = m_gSimpleWater.GetWaterHeight() - fCamHeightAboveWater;
-
-	UnderWaterCam.SetPosition(v3CamPosUnderWater);
-
-	// Flip the target vector of the under water camera over the Y axis
-	SVector3Df v3CamTargetUnderWater = rCamera.GetTarget();
-	v3CamTargetUnderWater.y *= -1.0f;
-	UnderWaterCam.SetTarget(v3CamTargetUnderWater);
-
-	SVector3Df v3PlaneNormal(0.0f, 1.0f, 0.0f);
-	SVector3Df v3PointOnPlane(0.0f, m_gSimpleWater.GetWaterHeight() + 0.5f, 0.0f);
-
-	float fDot = -v3PlaneNormal.dot(v3PointOnPlane);
-	m_pTerrainShader->setVec4("v4ClipPlane", v3PlaneNormal.x, v3PlaneNormal.y, v3PlaneNormal.z, fDot);
-	m_gSimpleWater.StopReflectionPass();
-}
-
-void CBaseTerrain::RenderTerrainRefractionPass(const CCamera& rCamera)
-{
-	m_gSimpleWater.StartRefractionPass();
-
-	SVector3Df v3PlaneNormal(0.0f, 1.0f, 0.0f);
-	SVector3Df v3PointOnPlane(0.0f, m_gSimpleWater.GetWaterHeight() + 0.5f, 0.0f);
-
-	float fDot = -v3PlaneNormal.dot(v3PointOnPlane);
-	m_pTerrainShader->setVec4("v4ClipPlane", v3PlaneNormal.x, v3PlaneNormal.y, v3PlaneNormal.z, fDot);
-	glFrontFace(GL_CCW);
-	m_gQuadList.Render();
-	glFrontFace(GL_CW);
-
-	m_gSimpleWater.StopRefractionPass();
-}
-
-void CBaseTerrain::RenderTerrainDefaultPass(const CCamera& rCamera)
-{
-	SVector3Df v3PlaneNormal(0.0f, 1.0f, 0.0f);
-	SVector3Df v3PointOnPlane(0.0f, 0.0f, 0.0f);
-	float fDot = -v3PlaneNormal.dot(v3PointOnPlane);
-	m_pTerrainShader->setVec4("v4ClipPlane", v3PlaneNormal.x, v3PlaneNormal.y, v3PlaneNormal.z, fDot);
-	glFrontFace(GL_CCW);
-	m_gQuadList.Render();
-	glFrontFace(GL_CW);
-}
-
-void CBaseTerrain::RenderWater(const CCamera& rCamera)
-{
-	m_gSimpleWater.Render(rCamera.GetPosition(), rCamera.GetViewProjMatrix(), m_v3LightDir);
-}
-*/
-
-void CBaseTerrain::ApplyTerrainBrush(EBrushType eBrushType, GLint iX, GLint iZ, GLfloat fSize, GLfloat fRadius, GLfloat fNewHeight)
-{
-	m_gQuadList.CircleBrush(eBrushType, iX, iZ, fSize, fRadius, fNewHeight);
-}
-
-GLint CBaseTerrain::GetWidth() const
-{
-	return (m_gQuadList.GetWidth());
-}
-
-GLint CBaseTerrain::GetDepth() const
-{
-	return (m_gQuadList.GetDepth());
-}
-
-const std::vector<CQuadList::TQuadVertex>& CBaseTerrain::GetVertices() const
-{
-	return (m_gQuadList.GetVertices());
-}
-
-const std::vector<GLuint>& CBaseTerrain::GetIndices() const
-{
-	return (m_gQuadList.GetIndices());
-}
-
-float CBaseTerrain::GetWorldWidth() const
-{
-	return (static_cast<float>(m_gQuadList.GetWidth()) * m_fWorldScale);
-}
-
-float CBaseTerrain::GetWorldDepth() const
-{
-	return (static_cast<float>(m_gQuadList.GetDepth()) * m_fWorldScale);
-}
-
-GLint CBaseTerrain::GetPatchSize() const
-{
-	return (m_iNumPatches);
-}
-
-void CBaseTerrain::ApplyTerrainBrush_World(EBrushType eBrushType, GLfloat worldX, GLfloat worldZ, GLfloat fRadius, GLfloat fStrength)
-{
-	float fWorldScale = GetWorldScale();
-	m_gQuadList.ApplyTerrainBrush_World(eBrushType, worldX, worldZ, fRadius, fStrength, fWorldScale);
-}
-
-float CBaseTerrain::GetRoughness() const
-{
-	return (m_fRoughness);
-}
-
-void CBaseTerrain::SetRoughness(const float fRoughness)
-{
-	m_fRoughness = fRoughness;
-}
-

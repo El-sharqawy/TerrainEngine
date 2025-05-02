@@ -7,7 +7,7 @@ CMesh::~CMesh()
 	Clear();
 }
 
-bool CMesh::LoadMesh(const std::string& stFileName)
+bool CMesh::LoadMesh(const std::string& stFileName, bool bIsUVFlipped)
 {
 	// Release the previously loaded mesh (if it exists)
 	Clear();
@@ -27,7 +27,14 @@ bool CMesh::LoadMesh(const std::string& stFileName)
 
 	bool bRet = false;
 
-	m_pScene = m_Importer.ReadFile(stFileName.c_str(), ASSIMP_LOAD_FLAGS);
+	if (bIsUVFlipped)
+	{
+		m_pScene = m_Importer.ReadFile(stFileName.c_str(), ASSIMP_LOAD_FLAGS_UV_FLIP);
+	}
+	else
+	{
+		m_pScene = m_Importer.ReadFile(stFileName.c_str(), ASSIMP_LOAD_FLAGS);
+	}
 
 	if (m_pScene)
 	{
@@ -496,7 +503,7 @@ bool CMesh::InitMaterials(const aiScene* pScene, const std::string& stFileName)
 	std::string stDir = GetDirFromFilename(stFileName);
 
 #if defined(ENABLE_PRINT_MESH_DATA)
-	sys_log("CMesh::InitMaterials Num materials: %d\n", pScene->mNumMaterials);
+	sys_log("CMesh::InitMaterials Num materials: %d", pScene->mNumMaterials);
 #endif
 
 	// Initialize the materials

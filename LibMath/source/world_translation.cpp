@@ -7,12 +7,12 @@ CWorldTranslation::CWorldTranslation()
 	m_vRotation = SVector3Df(0.0f, 0.0f, 0.0f);
 }
 
-void CWorldTranslation::SetScale(const float fScale)
+void CWorldTranslation::SetScale(const GLfloat fScale)
 {
 	m_fScale = fScale;
 }
 
-void CWorldTranslation::SetPosition(const float fPosX, const float fPosY, const float fPosZ)
+void CWorldTranslation::SetPosition(const GLfloat fPosX, const GLfloat fPosY, const GLfloat fPosZ)
 {
 	m_vPosition.x = fPosX;
 	m_vPosition.y = fPosY;
@@ -24,7 +24,7 @@ void CWorldTranslation::SetPosition(const SVector3Df& v3Pos)
 	m_vPosition = v3Pos;
 }
 
-void CWorldTranslation::SetRotation(const float fRotX, const float fRotY, const float fRotZ)
+void CWorldTranslation::SetRotation(const GLfloat fRotX, const GLfloat fRotY, const GLfloat fRotZ)
 {
 	m_vRotation.x = fRotX;
 	m_vRotation.y = fRotY;
@@ -36,7 +36,7 @@ void CWorldTranslation::SetRotation(const SVector3Df& v3Rot)
 	m_vRotation = v3Rot;
 }
 
-void CWorldTranslation::Rotate(const float fRotX, const float fRotY, const float fRotZ)
+void CWorldTranslation::Rotate(const GLfloat fRotX, const GLfloat fRotY, const GLfloat fRotZ)
 {
 	m_vRotation.x += fRotX;
 	m_vRotation.y += fRotY;
@@ -48,7 +48,7 @@ void CWorldTranslation::Rotate(const SVector3Df& v3Rot)
 	m_vRotation += v3Rot;
 }
 
-float CWorldTranslation::GetScale() const
+GLfloat CWorldTranslation::GetScale() const
 {
 	return m_fScale;
 

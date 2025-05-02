@@ -4,10 +4,10 @@
 #include <memory>
 #include "shader.h"
 #include "../../LibMath/source/ray.h"
-#include "../../LibTerrain/source/quad_list.h"
 #include "../../LibTerrain/source/terrain.h"
+#include "../../LibTerrain/source/object.h"
 
-class CScreen
+class CScreen : public CSingleton<CScreen>, public CObject
 {
 public:
 	CScreen(GLint iVerticesNum = 1024);
@@ -42,21 +42,18 @@ public:
 	bool GetCursorPosition(float* px, float* py, float* pz);
 	bool GetCursorPosition(SVector3Df* v3Pos);
 
-	void Update();
+	//if the class will cointain some logic, so it must be refreshed at each game loop cycle by calling update. Otherwise just don't override it.  
+	virtual void Update();
 
 	static CRay& GetCRay()
 	{
 		return ms_Ray;
 	}
 
-	bool GetRayTerrainIntersection(const SVector3Df& rayOrigin, const SVector3Df& rayDir,
-		const std::vector<CQuadList::TQuadVertex>& terrainVertices, const std::vector<GLuint>& terrainIndices, GLint terrainWidth, GLint terrainDepth,
-		SVector3Df& intersectionPoint);
-
-	void ApplyTerrainBrush(EBrushType eBrushType);
-
-	void SetEditingMode(bool bActive);
-	bool GetEditingMode() const;
+	SVector3Df GetRayFromScreenCenter();
+ 
+	virtual void Render() {}
+	virtual void SetGUI() {}
 
 protected:
 	typedef struct SScreenVertex
@@ -68,18 +65,23 @@ protected:
 	void UpdateVertexBuffer(const TScreenVertex* vertices, size_t vertexCount);
 
 public: // terrrain
-	void SetTerrain(CBaseTerrain* pTerrain)
-	{
-		m_pTerrain = pTerrain;
-	}
+	bool RaycastHeightmap(const SVector3Df& rayOrigin, const SVector3Df& rayDir, SVector3Df& intersectionPoint);
+	bool RaycastHeightmapFast(const SVector3Df& rayOrigin, const SVector3Df& rayDir, SVector3Df& intersectionPoint);
 
-	CBaseTerrain* GetTerrain() const
-	{
-		return (m_pTerrain);
-	}
+	void ApplyTerrainBrush(EBrushType eBrushType);
 
-public:
-	SVector3Df ms_v3InterSectionPoint;
+	void SetEditingMode(bool bActive);
+	bool GetEditingMode() const;
+
+	void SetBrushRadius(float fVal);
+	float GetBrushRadius() const;
+	void SetBrushStrength(float fVal);
+	float GetBrushStrength() const;
+
+	void SetTextureNum(GLint iTexNum);
+	GLint GetTextureNum() const;
+
+	SVector3Df GetIntersectionPoint() const;
 
 private:
 	GLuint m_iVAO; // Vertex Array Object
@@ -98,7 +100,17 @@ private:
 	SVector3Df ms_v3PickRayOrigin;
 	SVector3Df ms_v3PickRayDir;
 
-	CBaseTerrain* m_pTerrain;
-
+	// Terrain Edit Methods
+	GLint m_iTerrainWidth;
+	GLint m_iTerrainDepth;
 	bool m_bEditingMode;
+	bool m_bTerrainBrush;
+	bool m_bTerrainTextureBrush;
+
+	SVector3Df m_v3InterSectionPoint;
+	GLfloat m_fBrushRadius;
+	GLfloat m_fBrushStrength;
+	GLint m_iTerrainTexNum;
+
+	GLboolean m_bTerrainRayIntersection;
 };

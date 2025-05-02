@@ -7,15 +7,15 @@ class CWorldTranslation
 public:
 	CWorldTranslation();
 
-	void SetScale(const float fScale);
-	void SetPosition(const float fPosX, const float fPosY, const float fPosZ);
+	void SetScale(const GLfloat fScale);
+	void SetPosition(const GLfloat fPosX, const GLfloat fPosY, const GLfloat fPosZ);
 	void SetPosition(const SVector3Df& v3Pos);
-	void SetRotation(const float fRotX, const float fRotY, const float fRotZ);
+	void SetRotation(const GLfloat fRotX, const GLfloat fRotY, const GLfloat fRotZ);
 	void SetRotation(const SVector3Df& v3Rot);
-	void Rotate(const float fRotX, const float fRotY, const float fRotZ);
+	void Rotate(const GLfloat fRotX, const GLfloat fRotY, const GLfloat fRotZ);
 	void Rotate(const SVector3Df& v3Rot);
 
-	float GetScale() const;
+	GLfloat GetScale() const;
 	SVector3Df GetPosition() const;
 	SVector3Df GetRotation() const;
 	CMatrix4Df GetMatrix() const;
@@ -27,7 +27,7 @@ public:
 	SVector3Df WorldDirToLocalDir(const SVector3Df& v3WorldDir) const;
 
 private:
-	float m_fScale;
+	GLfloat m_fScale;
 	SVector3Df m_vPosition;
 	SVector3Df m_vRotation;
 };

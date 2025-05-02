@@ -1,0 +1,89 @@
+#version 460 core
+
+// define the number of CPs in the output patch                                                 
+layout (vertices = 3) out;
+
+uniform vec3 v3CameraPos;
+uniform float fTessMultiplier;
+uniform int iLodLevel;
+uniform int iLodLevelMax;
+
+// attributes of the input CPs                                                                  
+in vec3 WorldPos_CS_in[];                                                                       
+in vec2 TexCoord_CS_in[];                                                                       
+in vec3 Normal_CS_in[];                                                                         
+
+// attributes of the output CPs                                                                 
+out vec3 WorldPos_ES_in[];                                                                      
+out vec2 TexCoord_ES_in[];                                                                      
+out vec3 Normal_ES_in[]; 
+
+// Calculate the tessellation level based on the distance to the camera
+float GetTessellationLevel(float fDistance0, float fDistance1)
+{
+    float fAvgDistance = (fDistance0 + fDistance1) / 2.0f;
+
+    if (fAvgDistance < 3500.0f)
+    {
+        return 1.0f; // Very high tessellation when very close
+    }
+    else if (fAvgDistance < 7000.0f)
+    {
+        return 1.0f;
+    }
+    else
+    {
+        return 1.0f; // Very far = no extra tessellation
+    }
+}
+
+// a simple distance-based falloff (you can tweak the breakpoints & return values)
+float GetDistanceFactor(float d)
+{
+    if (d <  50.0) return 2.0;    // up to 50 units away -> 2× tess
+    if (d < 200.0) return 1.0;    // 50–200 -> 1× tess
+    return 0.5;                   // >200 -> half tess
+}
+
+void main()
+{
+    // Set the control points of the output patch
+    WorldPos_ES_in[gl_InvocationID] = WorldPos_CS_in[gl_InvocationID];
+    TexCoord_ES_in[gl_InvocationID] = TexCoord_CS_in[gl_InvocationID];
+    Normal_ES_in[gl_InvocationID] = Normal_CS_in[gl_InvocationID];
+
+    vec3 WorldPos1 = vec3(WorldPos_ES_in[0].x, WorldPos_ES_in[0].y, WorldPos_ES_in[0].z);
+    vec3 WorldPos2 = vec3(WorldPos_ES_in[1].x, WorldPos_ES_in[1].y, WorldPos_ES_in[1].z);
+    vec3 WorldPos3 = vec3(WorldPos_ES_in[2].x, WorldPos_ES_in[2].y, WorldPos_ES_in[2].z);
+
+    // Calculate the tessellation factor based on the distance to the camera
+    float distance0 = length(v3CameraPos - WorldPos1);
+    float distance1 = length(v3CameraPos - WorldPos2);
+    float distance2 = length(v3CameraPos - WorldPos3);
+
+    // Calculate the tessellation levels
+    //gl_TessLevelOuter[0] = fTessMultiplier * GetTessellationLevel(distance1, distance2);
+    //gl_TessLevelOuter[1] = fTessMultiplier * GetTessellationLevel(distance2, distance0);
+    //gl_TessLevelOuter[2] = fTessMultiplier * GetTessellationLevel(distance0, distance1);
+    //gl_TessLevelInner[0] = gl_TessLevelOuter[2];
+
+    // Lower iLodLevel = more tessellation
+    float lodFactor = pow(2.0, float(iLodLevelMax - iLodLevel));
+
+    // Optional: clamp
+    lodFactor = clamp(lodFactor, 1.0, 4.0);
+
+    // 2) Distance factor: >1 means more tess near, <1 means less tess far
+    float dAvg = (distance0 + distance1 + distance2) / 3.0;
+    float distFactor = GetDistanceFactor(dAvg);
+
+    // 3) Combine, then apply your global multiplier
+    float finalTess = fTessMultiplier * lodFactor * distFactor;
+    finalTess = clamp(finalTess, 1.0, 16.0);
+
+    // Set tessellation
+    gl_TessLevelOuter[0] = finalTess;
+    gl_TessLevelOuter[1] = finalTess;
+    gl_TessLevelOuter[2] = finalTess;
+    gl_TessLevelInner[0] = finalTess;
+}

@@ -1,0 +1,52 @@
+#version 460 core
+
+// Tessellation Evaluation Shader (TES) for terrain generation
+// This shader is responsible for evaluating the tessellated vertices and
+// sampling the height from a height map texture to create a terrain mesh.
+// It takes the tessellated vertices and interpolates their positions and texture coordinates.
+// The shader also applies a height offset to the vertices based on the sampled height from the texture.
+// The final vertex positions are transformed from world space to clip space using the provided view-projection matrix.
+// The shader uses a height map texture to determine the height of the terrain at each vertex.
+// The tessellation is done in triangles, and the shader uses the tessellation coordinates to interpolate the vertex positions and texture coordinates.
+// The shader outputs the final vertex positions and texture coordinates to be used in the next stage of the rendering pipeline.
+
+layout(triangles, equal_spacing, ccw) in;
+
+in vec3 WorldPos_ES_in[];
+in vec2 TexCoord_ES_in[];
+in vec3 Normal_ES_in[];
+flat in int InstanceID_ES_in[]; 
+in float TextureBlendFactor_ES_in[]; 
+
+uniform mat4 mat4ViewProj;
+uniform vec3 v3CameraPos;
+uniform vec4 v4ClipPlane;
+
+out vec3 v3WorldPos;
+out vec2 v2TexCoord;
+out vec3 v3Normal;
+
+vec2 interpolate2D(vec2 v0, vec2 v1, vec2 v2)
+{
+    // Interpolate between three 3D vectors
+    return vec2(gl_TessCoord.x) * v0 + vec2(gl_TessCoord.y) * v1 + vec2(gl_TessCoord.z) * v2;
+}
+
+vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
+{
+    // Interpolate between three 3D vectors
+    return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
+}
+
+
+void main()
+{
+    // Interpolate the attributes of the output vertex using the barycentric coordinates        
+    v2TexCoord = interpolate2D(TexCoord_ES_in[0], TexCoord_ES_in[1], TexCoord_ES_in[2]);
+    v3Normal = normalize(interpolate3D(Normal_ES_in[0], Normal_ES_in[1], Normal_ES_in[2]));
+    v3WorldPos = interpolate3D(WorldPos_ES_in[0], WorldPos_ES_in[1], WorldPos_ES_in[2]);
+
+    gl_ClipDistance[0] = dot(v4ClipPlane, vec4(v3WorldPos, 1.0));
+
+    gl_Position = mat4ViewProj * vec4(v3WorldPos, 1.0);
+}

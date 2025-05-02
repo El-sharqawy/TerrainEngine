@@ -8,7 +8,6 @@
 
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
 
-#include "glad.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 

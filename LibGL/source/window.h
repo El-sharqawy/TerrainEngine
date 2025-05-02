@@ -3,8 +3,10 @@
 #include <GLFW/glfw3.h>
 #include <string>
 #include "screen.h"
+#include "../../LibTerrain/source/lod_manager.h"
+#include "frame_buffer.h"
 
-class CMidPointTerrain;
+class CBaseTerrain;
 
 class CWindow : public CSingleton<CWindow>
 {
@@ -32,17 +34,11 @@ public:
 	void SetCamera(CCamera* pCamera);
 	CCamera* GetCamera();
 
-	void SetScreen(CScreen* pScreen);
-	CScreen* GetScreen();
-
 	void SetBrushType(EBrushType eNewBrush);
 	const EBrushType& GetBrushType() const;
 
-	void SetMidPointTerrain(CMidPointTerrain* pMidPointTerrain);
-	CMidPointTerrain* GetMidPointTerrain();
-
-	void SetFrameBufferObject(CFrameBuffer* pFBO);
-	CFrameBuffer* GetFrameBufferObject();
+	void SetFrameBuffer(CFrameBuffer* pFBO);
+	CFrameBuffer* GetFrameBuffer();
 
 protected:
 	void Destroy();
@@ -58,6 +54,7 @@ protected:
 
 public: // Singleton Classes
 	CCameraManager camera_manager;
+	CLodManager lod_manager;
 
 private:
 	GLFWwindow* m_pWindow;
@@ -70,10 +67,7 @@ private:
 	std::array<bool, 2> m_bMouseState;
 	std::array<bool, 1024> m_bKeyBools;
 	CCamera* m_pCamera;
-	CScreen* m_pScreen;
-	CMidPointTerrain* m_pTerrain;
+	CFrameBuffer* m_pFrameBufObj;
 
 	EBrushType m_eBrushType;
-
-	CFrameBuffer* m_pFrameBufObj;
 };

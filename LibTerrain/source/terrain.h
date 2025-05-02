@@ -1,96 +1,89 @@
 #pragma once
 
-#include "quad_list.h"
+#include <glad/glad.h>
+#include "../../LibMath/source/grid.h"
+#include "../../LibGL/source/shader.h"
+#include "geomip_grid.h"
 #include "object.h"
-#include "simple_water.h"
+#include "texture_set.h"
+#include "../../LibImageUI/imgui.h"
 
-class CBaseTerrain : public CObject
+class CBaseTerrain : public CSingleton<CBaseTerrain>, public CObject
 {
 public:
 	CBaseTerrain();
 	~CBaseTerrain();
 
-	void Destroy();
+	void InitializeTerrain(GLint iTerrainSize, GLint iPatchSize, GLfloat fWorldScale, GLfloat fTextureScale);
 
-	bool InitializeTerrain(const float fWorldScale, const float fTextureScale, const std::vector<std::string>& vTexturesNames);
-	void InitializeShaders();
-
-	void LoadFromFile(const std::string& sFileName);
-	void SaveToFile(const std::string& sFileName);
-
-	void SetTexture(CTexture* pTexture, GLint iIndex);
-	void SetMinHeight(const float fVal);
-	void SetMaxHeight(const float fVal);
-	void SetMinMaxHeight(const float fMinVal, const float fMaxVal);
-	void SetTexturesHeights(const float fTexHeight0, const float fTexHeight1, const float fTexHeight2, const float fTexHeight3);
-	void SetLightDir(const SVector3Df& v3LightDir);
-
-	float GetHeight(GLint iX, GLint iZ) const;
-	float GetHeightInterpolated(GLfloat fX, GLfloat fZ) const;
-	float GetWorldScale() const;
-	float GetWorldSize() const;
-	float GetWorldHeight(GLfloat fX, GLfloat fZ) const;
-	float GetTextureScale() const;
-	float GetMinHeight() const;
-	float GetMaxHeight() const;
 	GLint GetSize() const;
-	SVector3Df ConstrainCameraToTerrain();
-	void ApplyTerrainBrush(EBrushType eBrushType, GLint iX, GLint iZ, GLfloat fSize, GLfloat fRadius, GLfloat fNewHeight);
-
-	void ApplyTerrainBrush_World(EBrushType eBrushType, GLfloat worldX, GLfloat worldZ, GLfloat fRadius, GLfloat fStrength);
-
-	CQuadList& GetQuadList()
-	{
-		return m_gQuadList;
-	}
-
+	GLint GetPatchSize() const;
 	GLint GetWidth() const;
 	GLint GetDepth() const;
+	GLfloat GetWorldScale() const;
+	GLfloat GetTextureScale() const;
+	GLfloat GetHeight(GLint iX, GLint iZ) const;
 
-	float GetWorldWidth() const;
-	float GetWorldDepth() const;
+	CGrid<GLfloat>* GetMapGrid();
+	CShader* GetTerrainShader();
+	CGeoMipGrid* GetGeoMipGrid();
+	CWorldTranslation* GetWorldTranslation();
 
-	const std::vector<CQuadList::TQuadVertex>& GetVertices() const;
-	const std::vector<GLuint>& GetIndices() const;
+	std::vector<CGeoMipGrid::TVertex>& GetVertices() const;
+	std::vector<GLuint>& GetIndices() const;
+	std::vector<TLodInfo>& GetLodInfo() const;
 
-	GLint GetPatchSize() const;
+	void UpdateVertexBuffer();
 
-	float GetRoughness() const;
-	void SetRoughness(const float fRoughness);
+	float GetHeightInterpolated(GLfloat fX, GLfloat fZ) const;
+	float GetWorldSize() const;
+	float GetWorldHeight(GLfloat fX, GLfloat fZ) const;
 
-	virtual void SetGUI() {}
+	SVector3Df ConstrainCameraToTerrain();
 
-	//if the class will cointain some logic, so it must be refreshed at each game loop cycle by calling update. Otherwise just don't override it.  
-	virtual void Update() {}
+	virtual void Render();
+	virtual void SetGUI();
+	virtual void Update();
 
-	void Render(const CCamera& rCamera);
-	void RenderTerrain(const CCamera& rCamera);
-	//void RenderTerrainReflectionPass(const CCamera& rCamera);
-	//void RenderTerrainRefractionPass(const CCamera& rCamera);
-	//void RenderTerrainDefaultPass(const CCamera& rCamera);
-	//void RenderWater(const CCamera& rCamera);
+	void SetLightDirection(const SVector3Df& v3LightDir);
 
-protected:
-	bool LoadHeightMapFile(const std::string& sFileName);
-	void Finalize();
+	const TTerrainTexture& GetTerrainTexture(size_t iIndex) const;
+	void AddTerrainTexture(const TTerrainTexture& terrainTex) const;
 
-protected:
-	GLint m_iTerrainSize;
-	GLint m_iNumPatches;
-	float m_fWorldScale;
-	CGrid<float> m_fHeightMapGrid;
-	float m_fMinHeight;
-	float m_fMaxHeight;
-	CShader* m_pTerrainShader;
-	float m_fRoughness;
+	size_t GetTexturesCount() const;
+	void SetCurrentTexture(size_t iIndex);
+
+	void LoadTextureSet(const std::string& stFileName);
+
+	void DoBindlesslyTexturesSetup();
 
 private:
-	float m_fTextureScale;
-	CTexture* m_pTextures[4];
-	CTexture m_gHeightMapTex;
-	CQuadList m_gQuadList;
+	void InitializeShaders();
 
+public:
+	static void SetTextureSet(CTerrainTextureSet* pTextureSet);
+	static CTerrainTextureSet* GetTextureSet();
+
+protected:	// allow it to be accessed through inheritance
+	GLint m_iTerrainSize;
+	GLint m_iPatchSize;
+	CGrid<GLfloat>* m_pMapGrid;
+	GLfloat m_fWorldScale;
+	GLfloat m_fTextureScale;
+	std::vector<CTexture*> m_vSpatTextures;
+
+private:
+	CShader* m_pTerrainShader;
+	CGeoMipGrid* m_pGeoMapGrid;
 	SVector3Df m_v3LightDir;
-	float m_fCameraHeight;
-	//CSimpleWater m_gSimpleWater;
+	CWorldTranslation* m_pWorldTranslation;
+	
+	GLint m_iSelectedBtnIdx;
+
+	static CTerrainTextureSet* ms_pTerrainTextureSet;
+
+	GLuint m_uiTerrainHandlesSSBO; // for Bindless textures
+	std::vector<GLuint64> m_vTextureHandles;
+
 };
+

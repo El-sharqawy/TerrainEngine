@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "screen.h"
+#include "window.h"
 
 CRay CScreen::ms_Ray;
 
@@ -49,8 +50,20 @@ CScreen::CScreen(GLint iVerticesNum)
 	m_iVertexCapacity = 1;
 	m_matView = CCameraManager::Instance().GetCurrentCamera()->GetViewMatrix();
 	m_matInverseView = CCameraManager::Instance().GetCurrentCamera()->GetViewMatrixInverse();
-	ms_v3InterSectionPoint = SVector3Df(0.0f, 0.0f, 0.0f);
+
+	ms_v3PickRayOrigin = SVector3Df(0.0f);
+	ms_v3PickRayDir = SVector3Df(0.0f);
+
+	// Terrain Variables
+	//m_pTerrain = nullptr;
+	m_iTerrainWidth = 0;
+	m_iTerrainDepth = 0;
+	m_v3InterSectionPoint = SVector3Df(0.0f);
 	m_bEditingMode = false;
+	m_fBrushRadius = 5.0f;
+	m_fBrushStrength = 5.0f;
+	m_iTerrainTexNum = 0;
+	m_bTerrainRayIntersection = false;
 }
 
 void CScreen::Init()
@@ -513,139 +526,6 @@ void CScreen::SetDiffuseColor(float r, float g, float b, float a)
 	m_v4DiffColor = SVector4Df(r, g, b, a);
 }
 
-static bool IntersectTriangle(const SVector3Df& c_orig,
-	const SVector3Df& c_dir,
-	const SVector3Df& c_v0,
-	const SVector3Df& c_v1,
-	const SVector3Df& c_v2,
-	float* pu,
-	float* pv,
-	float* pt)
-{
-	// Compute the two edges sharing c_v0
-	SVector3Df edge1 = c_v1 - c_v0;
-	SVector3Df edge2 = c_v2 - c_v0;
-
-	// Begin calculating determinant - also used to calculate U parameter
-	SVector3Df pvec = c_dir.cross(edge2);
-	float det = edge1.dot(pvec);
-
-	// If the determinant is near zero, the ray lies in the plane of the triangle
-	// (or the triangle is degenerate)
-	if (fabs(det) < 0.0001f)
-	{
-		return false;
-	}
-
-	float invDet = 1.0f / det;
-
-	// Calculate distance from c_v0 to ray origin
-	SVector3Df tvec = c_orig - c_v0;
-
-	// Calculate U parameter and test bounds
-	float u = tvec.dot(pvec) * invDet;
-
-	if (u < 0.0f || u > 1.0f)
-	{
-		return false;
-	}
-
-	// Prepare to test V parameter
-	SVector3Df qvec = tvec.cross(edge1);
-
-	// Calculate V parameter and test bounds
-	float v = c_dir.dot(qvec) * invDet;
-
-	if (v < 0.0f || u + v > 1.0f)
-	{
-		return false;
-	}
-
-	// Calculate t, the ray parameter at the intersection
-	float t = edge2.dot(qvec) * invDet;
-
-	if (t < 0) // Optional: ensure intersection is in front of the ray
-		return false;
-
-	// Return the barycentrics and the ray parameter t
-	*pu = u;
-	*pv = v;
-	*pt = t;
-
-	return true;
-}
-
-bool CScreen::GetRayTerrainIntersection(const SVector3Df& rayOrigin, const SVector3Df& rayDir,
-	const std::vector<CQuadList::TQuadVertex>& terrainVertices, const std::vector<GLuint>& terrainIndices, GLint terrainWidth, GLint terrainDepth,
-	SVector3Df& intersectionPoint)
-{
-	float closestT = std::numeric_limits<float>::infinity();
-	bool hit = false;
-
-    // Validate input parameters
-    if (terrainVertices.empty() || terrainIndices.empty() || terrainWidth <= 0 || terrainDepth <= 0)
-	{
-        return false;
-    }
-
-	GLint iDepth = m_pTerrain->GetDepth();
-	GLint iWidth = m_pTerrain->GetWidth();
-
-    const size_t totalVertices = terrainVertices.size();
-    const size_t totalIndices = terrainIndices.size();
-
-	for (GLint z = 0; z < iDepth - 1; z+= m_pTerrain->GetPatchSize() - 1)
-	{
-		for (GLint x = 0; x < iWidth - 1; x+= m_pTerrain->GetPatchSize() - 1)
-		{
-			GLint iBaseVertex = z * iWidth + x;
-
-            // Check if baseVertex is within bounds
-            if (iBaseVertex >= totalVertices)
-			{
-                continue;
-            }
-
-            for (size_t i = 0; i < totalIndices; i += 3)
-			{
-				// Check if we have enough indices for a triangle
-                if (i + 2 >= totalIndices)
-				{
-                    break;
-                }
-
-                GLuint uiIndex0 = iBaseVertex + terrainIndices[i];
-                GLuint uiIndex1 = iBaseVertex + terrainIndices[i + 1];
-                GLuint uiIndex2 = iBaseVertex + terrainIndices[i + 2];
-
-                // Check if all indices are within bounds
-                if (uiIndex0 >= totalVertices || uiIndex1 >= totalVertices || uiIndex2 >= totalVertices)
-				{
-                    continue;
-                }
-
-				SVector3Df v0 = terrainVertices[uiIndex0].m_v3Pos;
-				SVector3Df v1 = terrainVertices[uiIndex1].m_v3Pos;
-				SVector3Df v2 = terrainVertices[uiIndex2].m_v3Pos;
-
-				float t, u, v;
-				if (IntersectTriangle(rayOrigin, rayDir, v0, v1, v2, &u, &v, &t))
-				{
-					// If the ray intersects the triangle and it's the closest intersection, update the closest point
-					if (t < closestT)
-					{
-						closestT = t;
-						intersectionPoint = rayOrigin + rayDir * t;  // Calculate intersection point
-						hit = true;
-					}
-				}
-			}
-		}
-	}
-
-	return hit;
-}
-
 static float TriangleArea(const SVector3Df p1, const SVector3Df p2, const SVector3Df p3)
 {
 	/* Calculate distance between p1 and p2, returns the length of A */
@@ -668,6 +548,207 @@ static float TriangleArea(const SVector3Df p1, const SVector3Df p2, const SVecto
 
 	/* Calcualte the Area using Heron Formula which as it looks now */
 	return (std::sqrt(semiPremiter * ((semiPremiter - a) * (semiPremiter - b) * (semiPremiter - c))));
+}
+
+SVector3Df CScreen::GetRayFromScreenCenter()
+{
+	SSceneElements* scene = CObject::pScene;
+	if (!scene)
+	{
+		sys_err("CSkyBox::Render: Scene Is NULL!!");
+		return SVector3Df(0.0f, 0.0f, 0.0f);
+	}
+
+	float screenX = static_cast<float>(CWindow::Instance().GetWidth()) / 2.0f;
+	float screenY = static_cast<float>(CWindow::Instance().GetHeight()) / 2.0f;
+
+	// Convert screen space to Normalized Device Coordinates (NDC)
+	float ndcX = (2.0f * screenX) / CWindow::Instance().GetWidth() - 1.0f;
+	float ndcY = 1.0f - (2.0f * screenY) / CWindow::Instance().GetHeight(); // Flip Y for OpenGL
+
+	SVector4Df rayClip(ndcX, ndcY, -1.0f, 1.0f);
+
+	// Inverse projection to eye (view) space
+	CMatrix4Df invProj = scene->pCamera->GetProjectionMat().Inverse();
+	SVector4Df rayEye = invProj * rayClip;
+	rayEye = SVector4Df(rayEye.x, rayEye.y, -1.0f, 0.0f);
+
+	// Inverse view to world space
+	CMatrix4Df invView = scene->pCamera->GetViewMatrix().Inverse();
+	SVector4Df rayWorld = invView * rayEye;
+
+	SVector3Df rayDir = SVector3Df(rayWorld.x, rayWorld.y, rayWorld.z).normalize();
+
+	return SVector3Df(rayDir.x, rayDir.y, rayDir.z);
+}
+
+/*bool CScreen::GetRayTerrainIntersection(const SVector3Df& rayOrigin, const SVector3Df& rayDir,
+	SVector3Df& intersectionPoint)
+{
+	CGeoMipGrid::TVertex vert;
+	float closestT = std::numeric_limits<float>::infinity();
+	bool hit = false;
+
+	GLint iDepth = GetTerrain()->GetDepth();
+	GLint iWidth = GetTerrain()->GetWidth();
+	GLint iPatchSize = GetTerrain()->GetPatchSize();
+
+	for (GLint z = 0; z < iDepth - 1; z += (iPatchSize - 1))
+	{
+		for (GLint x = 0; x < iWidth - 1; x += (iPatchSize - 1))
+		{
+			GLint iBaseVertex = z * iWidth + x;
+			GLint iNumIndices = GetTerrain()->GetGeoMipGrid()->GetLodInfo()[0].LodInfo[0][0][0][0].iCount;
+			for (GLint i = 0; i < iNumIndices; i += 3)
+			{
+				GLuint uiIndex0 = iBaseVertex + m_vTerrainIndices[i];
+				GLuint uiIndex1 = iBaseVertex + m_vTerrainIndices[i + 1];
+				GLuint uiIndex2 = iBaseVertex + m_vTerrainIndices[i + 2];
+
+				SVector3Df v0 = m_vTerrainVertices[uiIndex0].v3Pos;
+				SVector3Df v1 = m_vTerrainVertices[uiIndex1].v3Pos;
+				SVector3Df v2 = m_vTerrainVertices[uiIndex2].v3Pos;
+
+				float t, u, v;
+				if (IntersectTriangle(rayOrigin, rayDir, v0, v1, v2, &u, &v, &t))
+				{
+					// If the ray intersects the triangle and it's the closest intersection, update the closest point
+					if (t < closestT)
+					{
+						closestT = t;
+						intersectionPoint = rayOrigin + rayDir * t;  // Calculate intersection point
+						hit = true;
+					}
+				}
+			}
+		}
+	}
+
+	return hit;
+}*/
+
+bool CScreen::RaycastHeightmap(const SVector3Df& rayOrigin, const SVector3Df& rayDir, SVector3Df& intersectionPoint)
+{
+	if (rayDir.y >= 0.0f)
+		return false; // Only works for rays pointing downward
+
+	// Find where the ray crosses the ground plane
+	float t = -rayOrigin.y / rayDir.y;
+	SVector3Df groundPoint = rayOrigin + rayDir * t;
+
+	GLint width = CBaseTerrain::Instance().GetWidth();
+	GLint depth = CBaseTerrain::Instance().GetDepth();
+
+	float fx = groundPoint.x;
+	float fz = groundPoint.z;
+
+	if (fx < 0.0f || fx >= width - 1 || fz < 0.0f || fz >= depth - 1)
+		return false; // Out of terrain bounds
+
+	GLint ix = static_cast<GLint>(fx);
+	GLint iz = static_cast<GLint>(fz);
+
+	float localX = fx - ix;
+	float localZ = fz - iz;
+
+	// Get 4 corner heights
+	float h00 = CBaseTerrain::Instance().GetVertices()[iz * width + ix].m_v3Pos.y;
+	float h10 = CBaseTerrain::Instance().GetVertices()[iz * width + (ix + 1)].m_v3Pos.y;
+	float h01 = CBaseTerrain::Instance().GetVertices()[(iz + 1) * width + ix].m_v3Pos.y;
+	float h11 = CBaseTerrain::Instance().GetVertices()[(iz + 1) * width + (ix + 1)].m_v3Pos.y;
+
+	// Bilinear interpolation
+	float h0 = h00 + (h10 - h00) * localX;
+	float h1 = h01 + (h11 - h01) * localX;
+	float height = h0 + (h1 - h0) * localZ;
+
+	if (groundPoint.y <= height)
+	{
+		intersectionPoint = SVector3Df(groundPoint.x, height, groundPoint.z);
+		return true;
+	}
+
+	return false;
+}
+
+bool CScreen::RaycastHeightmapFast(const SVector3Df& rayOrigin, const SVector3Df& rayDir, SVector3Df& intersectionPoint)
+{
+	if (rayDir.y >= 0.0f)
+		return false; // Only works for downward rays
+
+	const float stepSize = 1.0f;
+	const int maxSteps = 102400;    // Max distance = 1024 units
+
+	const GLint width = m_iTerrainWidth;
+	const GLint depth = m_iTerrainDepth;
+	const float maxX = static_cast<float>(width - 2);
+	const float maxZ = static_cast<float>(depth - 2);
+
+	SVector3Df currentPos = rayOrigin;
+
+	for (int step = 0; step < maxSteps; ++step)
+	{
+		float fx = std::clamp(currentPos.x, 0.0f, maxX);
+		float fz = std::clamp(currentPos.z, 0.0f, maxZ);
+
+		GLint ix = static_cast<GLint>(fx);
+		GLint iz = static_cast<GLint>(fz);
+
+		float localX = fx - ix;
+		float localZ = fz - iz;
+
+		const auto& v00 = CBaseTerrain::Instance().GetVertices()[iz * width + ix].m_v3Pos.y;
+		const auto& v10 = CBaseTerrain::Instance().GetVertices()[iz * width + (ix + 1)].m_v3Pos.y;
+		const auto& v01 = CBaseTerrain::Instance().GetVertices()[(iz + 1) * width + ix].m_v3Pos.y;
+		const auto& v11 = CBaseTerrain::Instance().GetVertices()[(iz + 1) * width + (ix + 1)].m_v3Pos.y;
+
+		float h0 = v00 + (v10 - v00) * localX;
+		float h1 = v01 + (v11 - v01) * localX;
+		float height = h0 + (h1 - h0) * localZ;
+
+		if (currentPos.y <= height)
+		{
+			// Optional: binary refinement for smoother brush edge
+			SVector3Df backtrack = currentPos - rayDir * stepSize;
+			for (int j = 0; j < 4; ++j)
+			{
+				SVector3Df mid = (currentPos + backtrack) * 0.5f;
+				float mx = std::clamp(mid.x, 0.0f, maxX);
+				float mz = std::clamp(mid.z, 0.0f, maxZ);
+				GLint mix = static_cast<GLint>(mx);
+				GLint miz = static_cast<GLint>(mz);
+				float lx = mx - mix;
+				float lz = mz - miz;
+
+				float mh0 = CBaseTerrain::Instance().GetVertices()[miz * width + mix].m_v3Pos.y +
+					(CBaseTerrain::Instance().GetVertices()[miz * width + (mix + 1)].m_v3Pos.y -
+						CBaseTerrain::Instance().GetVertices()[miz * width + mix].m_v3Pos.y) * lx;
+
+				float mh1 = CBaseTerrain::Instance().GetVertices()[(miz + 1) * width + mix].m_v3Pos.y +
+					(CBaseTerrain::Instance().GetVertices()[(miz + 1) * width + (mix + 1)].m_v3Pos.y -
+						CBaseTerrain::Instance().GetVertices()[(miz + 1) * width + mix].m_v3Pos.y) * lx;
+
+				float midHeight = mh0 + (mh1 - mh0) * lz;
+
+				if (mid.y <= midHeight)
+					currentPos = mid;
+				else
+					backtrack = mid;
+			}
+
+			intersectionPoint = currentPos;
+			intersectionPoint.y = height;
+			return true;
+		}
+
+		currentPos += rayDir * stepSize;
+
+		// early out if ray is too far
+		if (currentPos.x < 0.0f || currentPos.x >= width || currentPos.z < 0.0f || currentPos.z >= depth)
+			return false;
+	}
+
+	return false;
 }
 
 void CScreen::SetCursorPosition(GLint iX, GLint iY, GLint hRes, GLint vRes)
@@ -703,65 +784,33 @@ void CScreen::SetCursorPosition(GLint iX, GLint iY, GLint hRes, GLint vRes)
 	rayDir = -rayDir;
 
 	// Store the ray
-	ms_Ray.SetStartPoint(ms_v3PickRayOrigin);
-	ms_Ray.SetDirection(rayDir, 51200.0f);
+	ms_Ray.SetStartPoint(CCameraManager::Instance().GetCurrentCamera()->GetPosition());
+	ms_Ray.SetDirection(CCameraManager::Instance().GetCurrentCamera()->GetDirection(), 51200.0f);
 
-	SVector3Df intersectionPoint;
-	if (GetRayTerrainIntersection(ms_v3PickRayOrigin, rayDir, m_pTerrain->GetVertices(), m_pTerrain->GetIndices(), GetTerrain()->GetWidth(), GetTerrain()->GetDepth(), intersectionPoint))
+	//if (m_pTerrain->GetQuadList().GetRayTerrainIntersection(ms_Ray.GetStartPoint(), ms_Ray.GetEndPoint(), intersectionPoint))
+	if (GetEditingMode())
 	{
-		ms_v3InterSectionPoint = intersectionPoint;
+		if (RaycastHeightmap(ms_Ray.GetStartPoint(), ms_Ray.GetDirection(), m_v3InterSectionPoint))
+		{
+			CBaseTerrain::Instance().GetTerrainShader()->Use();
+			CBaseTerrain::Instance().GetTerrainShader()->setVec3("u_HitPosition", m_v3InterSectionPoint);
+			CBaseTerrain::Instance().GetTerrainShader()->setFloat("u_HitRadius", m_fBrushRadius);
+			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", true);				// enable hit visualization
+			m_bTerrainRayIntersection = true;
+		}
+		else
+		{
+			CBaseTerrain::Instance().GetTerrainShader()->Use();
+			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", false);			// enable hit visualization
+			m_bTerrainRayIntersection = false;
+		}
 	}
-
 }
 
 void CScreen::Update()
 {
-	if (GetEditingMode() == true)
-	{
-		// Main circle
-		SetDiffuseColor(0.0f, 1.0f, 0.0f, 0.7f);
-		RenderCircle2d(
-			ms_v3InterSectionPoint.x,
-			ms_v3InterSectionPoint.y + 1.0f,
-			ms_v3InterSectionPoint.z,
-			50.0f,
-			32,
-			true
-		);
-
-		// Inner circle
-		SetDiffuseColor(0.0f, 0.8f, 0.0f, 0.5f);
-		RenderCircle2d(
-			ms_v3InterSectionPoint.x,
-			ms_v3InterSectionPoint.y + 1.1f,
-			ms_v3InterSectionPoint.z,
-			45.0f,
-			32,
-			true
-		);
-
-		// Outer circle
-		SetDiffuseColor(0.0f, 0.6f, 0.0f, 0.3f);
-		RenderCircle2d(
-			ms_v3InterSectionPoint.x,
-			ms_v3InterSectionPoint.y + 0.9f,
-			ms_v3InterSectionPoint.z,
-			55.0f,
-			32,
-			true
-		);
-
-		// Vertical line
-		SetDiffuseColor(1.0f, 0.0f, 0.0f, 0.7f);
-		RenderLine3d(
-			ms_v3InterSectionPoint.x,
-			ms_v3InterSectionPoint.y + 2.0f,
-			ms_v3InterSectionPoint.z,
-			ms_v3InterSectionPoint.x,
-			ms_v3InterSectionPoint.y - 2.0f,
-			ms_v3InterSectionPoint.z
-		);
-	}
+	// Render Anything
+	//RenderCircle2d(m_v3InterSectionPoint.x, m_pTerrain->GetWorldHeight(m_v3InterSectionPoint.x, m_v3InterSectionPoint.z) + 5.0f, m_v3InterSectionPoint.z, 50.0f, 128, true);
 }
 
 bool CScreen::GetCursorPosition(SVector3Df* v3Pos)
@@ -862,18 +911,25 @@ void CScreen::GetPickingPosition(float t, float* x, float* y, float* z)
 	*z = ms_v3PickRayOrigin.z + ms_v3PickRayDir.z * t;
 }
 
+
 void CScreen::ApplyTerrainBrush(EBrushType eBrushType)
 {
-	if (m_bEditingMode)
+	if (GetEditingMode() && m_bTerrainRayIntersection )
 	{
-		const float fRadius = 50.0f;     // Radius in world units
-		const float fStrength = 100.0f;   // Height change
-
 		// Just pass the exact world coordinates — no grid conversion here
-		float worldX = ms_v3InterSectionPoint.x;
-		float worldZ = ms_v3InterSectionPoint.z;
-
-		GetTerrain()->ApplyTerrainBrush_World(eBrushType, worldX, worldZ, fRadius, fStrength);
+		if (eBrushType >= BRUSH_TYPE_UP && eBrushType <= BRUSH_TYPE_NOISE)
+		{
+			CBaseTerrain::Instance().GetGeoMipGrid()->ApplyTerrainBrush_World(eBrushType, m_v3InterSectionPoint.x, m_v3InterSectionPoint.z, m_fBrushRadius, m_fBrushStrength);
+		}
+		else
+		{
+			TBrushParams brush{};
+			brush.v2WorldPos = SVector2Df(m_v3InterSectionPoint.x, m_v3InterSectionPoint.z);
+			brush.fRadius = m_fBrushRadius;
+			brush.fStrength = 1.0f;
+			brush.iSelectedTexChannel = CBaseTerrain::Instance().GetGeoMipGrid()->GetCurrentTextureIndex(); // G channel (for grass, e.g.)
+			CBaseTerrain::Instance().GetGeoMipGrid()->PaintSplatmap(eBrushType, brush);
+		}
 	}
 }
 
@@ -885,4 +941,39 @@ void CScreen::SetEditingMode(bool bActive)
 bool CScreen::GetEditingMode() const
 {
 	return (m_bEditingMode);
+}
+
+void CScreen::SetBrushRadius(float fVal)
+{
+	m_fBrushRadius = fVal;
+}
+
+float CScreen::GetBrushRadius() const
+{
+	return (m_fBrushRadius);
+}
+
+void CScreen::SetBrushStrength(float fVal)
+{
+	m_fBrushStrength = fVal;
+}
+
+float CScreen::GetBrushStrength() const
+{
+	return (m_fBrushStrength);
+}
+
+void CScreen::SetTextureNum(GLint iTexNum)
+{
+	m_iTerrainTexNum = iTexNum;
+}
+
+GLint CScreen::GetTextureNum() const
+{
+	return (m_iTerrainTexNum);
+}
+
+SVector3Df CScreen::GetIntersectionPoint() const
+{
+	return (m_v3InterSectionPoint);
 }

@@ -64,6 +64,7 @@ public:
 	const SVector3Df& GetPosition() const;
 	const SVector3Df& GetTarget() const;
 	const SVector3Df& GetUp() const;
+	const SVector3Df& GetDirection() const;
 	const CMatrix4Df& GetProjectionMat() const;
 	const SPersProjInfo& GetPersProjInfo() const;
 

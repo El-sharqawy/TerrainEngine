@@ -1,7 +1,8 @@
 #include "stdafx.h"
 #include "window.h"
 #include "screen.h"
-#include "../../LibTerrain/source/midpoint_terrain.h"
+#include "../../LibTerrain/source/terrain.h"
+#include "../../LibTerrain/source/skybox.h"
 
 static CWindow* appWnd = nullptr;
 GLuint CWindow::m_uiRandSeed = 0;
@@ -9,8 +10,7 @@ GLuint CWindow::m_uiRandSeed = 0;
 CWindow::CWindow()
 {
 	m_pWindow = nullptr;
-	m_pScreen = nullptr;
-	m_pTerrain = nullptr;
+	m_pFrameBufObj = nullptr;
 	m_uiWidth = DEFAULT_WINDOW_WIDTH;
 	m_uiHeight = DEFAULT_WINDOW_HEIGHT;
 	m_stWindowName = "NoWindow";
@@ -30,9 +30,9 @@ CWindow::CWindow()
 	m_bMouseState.at(0) = GLFW_RELEASE;
 	m_bMouseState.at(1) = GLFW_RELEASE;
 	m_bIsMouseFocusedIn = true;
-	m_eBrushType = BRUSH_TYPE_UP;
-#ifdef _WIN64
-	m_uiRandSeed = GetCurrentProcessId();
+	m_eBrushType = BRUSH_TYPE_NONE;
+#if defined(_WIN64)
+	m_uiRandSeed = 0;
 #else
 	m_uiRandSeed = getpid();
 #endif
@@ -68,6 +68,10 @@ bool CWindow::InitializeWindow(const std::string& stTitle, const GLuint& width, 
 		glfwTerminate();
 		return (false);
 	}
+
+	int Major, Minor, Rev;
+	glfwGetVersion(&Major, &Minor, &Rev);
+	sys_log("GLFW %d.%d.%d initialized", Major, Minor, Rev);
 
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -117,6 +121,8 @@ bool CWindow::InitializeWindow(const std::string& stTitle, const GLuint& width, 
 		glfwSetInputMode(m_pWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	}
 
+	SetWindowIcon("resources/icon/terrain.png");
+
 	return (true);
 }
 
@@ -127,6 +133,11 @@ bool CWindow::InitializeGLAD()
 		sys_err("Failed to Initialize GLAD.");
 		return (false);
 	}
+	if (!GLAD_GL_ARB_bindless_texture) {
+		sys_err("Bindless textures not supported!");
+		return (false);
+	}
+
 	return (true);
 }
 
@@ -152,8 +163,6 @@ GLFWwindow* CWindow::GetWindow()
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
 void CWindow::framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	appWnd->GetFrameBufferObject()->Resize(width, height);
-
 	appWnd->ResizeWindow(width, height);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -179,7 +188,7 @@ void CWindow::mouse_button_callback(GLFWwindow* window, int button, int action, 
 	}
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
 	{
-		appWnd->GetScreen()->ApplyTerrainBrush(appWnd->GetBrushType());
+		CScreen::Instance().ApplyTerrainBrush(appWnd->GetBrushType());
 	}
 }
 
@@ -235,31 +244,6 @@ void CWindow::keys_callback(GLFWwindow* window, int key, int scancode, int actio
 	{
 		switch (key)
 		{
-		case GLFW_KEY_1:
-			appWnd->SetBrushType(BRUSH_TYPE_UP);
-			sys_log("Changed Brush Type To: BRUSH_TYPE_UP");
-			break;
-
-		case GLFW_KEY_2:
-			appWnd->SetBrushType(BRUSH_TYPE_DOWN);
-			sys_log("Changed Brush Type To: BRUSH_TYPE_DOWN");
-			break;
-
-		case GLFW_KEY_3:
-			appWnd->SetBrushType(BRUSH_TYPE_FLATTEN);
-			sys_log("Changed Brush Type To: BRUSH_TYPE_FLATTEN");
-			break;
-
-		case GLFW_KEY_4:
-			appWnd->SetBrushType(BRUSH_TYPE_SMOOTH);
-			sys_log("Changed Brush Type To: BRUSH_TYPE_SMOOTH");
-			break;
-
-		case GLFW_KEY_5:
-			appWnd->SetBrushType(BRUSH_TYPE_NOISE);
-			sys_log("Changed Brush Type To: BRUSH_TYPE_NOISE");
-			break;
-
 		case GLFW_KEY_ESCAPE:
 			glfwSetWindowShouldClose(window, true);
 			break;
@@ -267,13 +251,6 @@ void CWindow::keys_callback(GLFWwindow* window, int key, int scancode, int actio
 		case GLFW_KEY_Q:
 			glfwSetWindowShouldClose(window, true);
 			break;
-
-		case GLFW_KEY_F:
-			double xpos, ypos;
-			glfwGetCursorPos(appWnd->GetWindow(), &xpos, &ypos);
-			appWnd->GetScreen()->SetCursorPosition(static_cast<GLint>(xpos), static_cast<GLint>(ypos), appWnd->GetWidth(), appWnd->GetHeight());
-			break;
-
 
 		case GLFW_KEY_X:
 			appWnd->GetCamera()->SetLock(!appWnd->GetCamera()->IsLocked());
@@ -318,7 +295,10 @@ void CWindow::ResizeWindow(GLuint iWidth, GLuint iHeight)
 {
 	m_uiWidth = iWidth;
 	m_uiHeight = iHeight;
+
+	GetFrameBuffer()->BindForWriting();
 	glViewport(0, 0, iWidth, iHeight);
+	GetFrameBuffer()->UnBindWriting();
 }
 
 void CWindow::Destroy()
@@ -371,17 +351,8 @@ void CWindow::SetCamera(CCamera* pCamera)
 
 CCamera* CWindow::GetCamera()
 {
+	assert(m_pCamera);
 	return m_pCamera;
-}
-
-void CWindow::SetScreen(CScreen* pScreen)
-{
-	m_pScreen = pScreen;
-}
-
-CScreen* CWindow::GetScreen()
-{
-	return m_pScreen;
 }
 
 void CWindow::SetBrushType(EBrushType eNewBrush)
@@ -394,24 +365,13 @@ const EBrushType& CWindow::GetBrushType() const
 	return (m_eBrushType);
 }
 
-void CWindow::SetMidPointTerrain(CMidPointTerrain* pMidPointTerrain)
-{
-	assert(pMidPointTerrain);
-	m_pTerrain = pMidPointTerrain;
-}
-
-CMidPointTerrain* CWindow::GetMidPointTerrain()
-{
-	assert(m_pTerrain);
-	return (m_pTerrain);
-}
-
-void CWindow::SetFrameBufferObject(CFrameBuffer* pFBO)
+void CWindow::SetFrameBuffer(CFrameBuffer* pFBO)
 {
 	m_pFrameBufObj = pFBO;
 }
 
-CFrameBuffer* CWindow::GetFrameBufferObject()
+CFrameBuffer* CWindow::GetFrameBuffer()
 {
+	assert(m_pFrameBufObj);
 	return (m_pFrameBufObj);
 }

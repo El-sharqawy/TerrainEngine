@@ -196,3 +196,223 @@ bool ReadFile(const char* pFileName, std::string& outFile)
 
     return ret;
 }
+
+bool IntersectTriangle(const SVector3Df& c_orig,
+    const SVector3Df& c_dir,
+    const SVector3Df& c_v0,
+    const SVector3Df& c_v1,
+    const SVector3Df& c_v2,
+    float* pu,
+    float* pv,
+    float* pt)
+{
+    // Compute the two edges sharing c_v0
+    SVector3Df edge1 = c_v1 - c_v0;
+    SVector3Df edge2 = c_v2 - c_v0;
+
+    // Begin calculating determinant - also used to calculate U parameter
+    SVector3Df pvec = c_dir.cross(edge2);
+    float det = edge1.dot(pvec);
+
+    // If the determinant is near zero, the ray lies in the plane of the triangle
+    // (or the triangle is degenerate)
+    if (fabs(det) < 0.0001f)
+    {
+        return false;
+    }
+
+    float invDet = 1.0f / det;
+
+    // Calculate distance from c_v0 to ray origin
+    SVector3Df tvec = c_orig - c_v0;
+
+    // Calculate U parameter and test bounds
+    float u = tvec.dot(pvec) * invDet;
+
+    if (u < 0.0f || u > 1.0f)
+    {
+        return false;
+    }
+
+    // Prepare to test V parameter
+    SVector3Df qvec = tvec.cross(edge1);
+
+    // Calculate V parameter and test bounds
+    float v = c_dir.dot(qvec) * invDet;
+
+    if (v < 0.0f || u + v > 1.0f)
+    {
+        return false;
+    }
+
+    // Calculate t, the ray parameter at the intersection
+    float t = edge2.dot(qvec) * invDet;
+
+    if (t < 0) // Optional: ensure intersection is in front of the ray
+        return false;
+
+    // Return the barycentrics and the ray parameter t
+    *pu = u;
+    *pv = v;
+    *pt = t;
+
+    return true;
+}
+
+bool IntersectTriangleNew(const SVector3Df& rayOrigin,
+    const SVector3Df& rayDir,
+    const SVector3Df& v0,
+    const SVector3Df& v1,
+    const SVector3Df& v2,
+    float* outU, float* outV, float* outT)
+{
+    const float EPSILON = 1e-6f;
+
+    SVector3Df edge1 = v1 - v0;
+    SVector3Df edge2 = v2 - v0;
+
+    SVector3Df h = rayDir.cross(edge2);
+    float a = edge1.dot(h);
+
+    if (fabs(a) < EPSILON)
+        return false; // Ray is parallel to triangle
+
+    float f = 1.0f / a;
+    SVector3Df s = rayOrigin - v0;
+    float u = f * s.dot(h);
+
+    if (u < 0.0f || u > 1.0f)
+        return false;
+
+    SVector3Df q = s.cross(edge1);
+    float v = f * rayDir.dot(q);
+
+    if (v < 0.0f || u + v > 1.0f)
+        return false;
+
+    float t = f * edge2.dot(q);
+
+    if (t > EPSILON) // Intersection behind origin is ignored
+    {
+        if (outU) *outU = u;
+        if (outV) *outV = v;
+        if (outT) *outT = t;
+        return true;
+    }
+
+    return false;
+}
+
+bool IntersectQuad(const SVector3Df& O,         // ray origin
+    const SVector3Df& D,                        // ray direction (normalized)
+    const SVector3Df& v0,                       // quad corner 0
+    const SVector3Df& v1,                       // quad corner 1
+    const SVector3Df& v2,                       // quad corner 2
+    const SVector3Df& v3,                       // quad corner 3
+    SVector3Df& outPoint,                       // where we store the hit
+    float& outT)                                // ray parameter
+{
+    // 1) Compute plane normal
+    SVector3Df N = (v1 - v0).cross(v2 - v0);
+    if (N.length() * N.length() < 1e-6f) return false;   // degenerate
+    N.normalize();
+
+    // 2) Ray-plane intersection: solve (O + t D - v0) * N = 0
+    float denom = N.dot(D);
+    if (fabs(denom) < 1e-6f) return false;         // ray parallel to plane
+
+    float numer = N.dot(v0 - O);
+    float t = numer / denom;
+    if (t < 0) return false;                       // behind the ray
+
+    SVector3Df P = O + D * t;
+
+    // 3) Point-in-quad test: check same-side for each edge
+    auto sameSide = [&](const SVector3Df& A, const SVector3Df& B) {
+        // edge from A -> B
+        SVector3Df edge = B - A;
+        SVector3Df toP = P - A;
+        // test sign of (edge x toP) * N
+        return (edge.cross(toP).dot(N) >= 0);
+        };
+
+    if (sameSide(v0, v1) &&
+        sameSide(v1, v3) &&
+        sameSide(v3, v2) &&
+        sameSide(v2, v0))
+    {
+        outPoint = P;
+        outT = t;
+        return true;
+    }
+
+    return false;
+}
+
+bool RayIntersectsAABB(const SVector3Df& rayOrigin, const SVector3Df& rayDir,
+    const SVector3Df& aabbMin, const SVector3Df& aabbMax)
+{
+    float tMin, tMax;
+
+    // X-axis check
+    if (rayDir.x == 0.0f)
+    {
+        if (rayOrigin.x < aabbMin.x || rayOrigin.x > aabbMax.x)
+            return false;
+        tMin = -INFINITY;
+        tMax = INFINITY;
+    }
+    else
+    {
+        tMin = (aabbMin.x - rayOrigin.x) / rayDir.x;
+        tMax = (aabbMax.x - rayOrigin.x) / rayDir.x;
+        if (tMin > tMax)
+            std::swap(tMin, tMax);
+    }
+
+    // Y-axis check
+    float tyMin, tyMax;
+    if (rayDir.y == 0.0f)
+    {
+        if (rayOrigin.y < aabbMin.y || rayOrigin.y > aabbMax.y)
+            return false;
+        tyMin = -INFINITY;
+        tyMax = INFINITY;
+    }
+    else
+    {
+        tyMin = (aabbMin.y - rayOrigin.y) / rayDir.y;
+        tyMax = (aabbMax.y - rayOrigin.y) / rayDir.y;
+        if (tyMin > tyMax)
+            std::swap(tyMin, tyMax);
+    }
+
+    if (tMin > tyMax || tyMin > tMax)
+        return false;
+
+    tMin = std::max(tMin, tyMin);
+    tMax = std::min(tMax, tyMax);
+
+    // Z-axis check
+    float tzMin, tzMax;
+    if (rayDir.z == 0.0f)
+    {
+        if (rayOrigin.z < aabbMin.z || rayOrigin.z > aabbMax.z)
+            return false;
+
+        tzMin = -INFINITY;
+        tzMax = INFINITY;
+    }
+    else
+    {
+        tzMin = (aabbMin.z - rayOrigin.z) / rayDir.z;
+        tzMax = (aabbMax.z - rayOrigin.z) / rayDir.z;
+        if (tzMin > tzMax)
+            std::swap(tzMin, tzMax);
+    }
+
+    if (tMin > tzMax || tzMin > tMax)
+        return false;
+
+    return true;
+}

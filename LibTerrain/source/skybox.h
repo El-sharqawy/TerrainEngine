@@ -2,6 +2,7 @@
 
 #include "../../LibGL/source/shader.h"
 #include "../../LibGL/source/window.h"
+#include "../../LibGL/source/frame_buffer.h"
 #include "object.h"
 #include "screen_space_shader.h"
 #include "skybox_framebuffer.h"
@@ -12,7 +13,7 @@ typedef struct SColorPreset
 	SVector3Df v3LightColor, v3FogColor;
 } TColorPreset;
 
-class CSkyBox : public CObject
+class CSkyBox : public CSingleton<CSkyBox>, public CObject
 {
 public:
 	CSkyBox(CWindow* pWindow);
@@ -33,15 +34,21 @@ public:
 	SVector3Df GetSkyColorTop() { return m_v3SkyColorTop; }
 	SVector3Df GetSkyColorBottom() { return m_v3SkyColorBottom; }
 
-	CFrameBuffer* GetFBO() { return m_pSkyBoxNewFBO; }
+	CFrameBuffer* GetFBO() { return m_pSkyBoxNew; }
 
 private:
 	SVector3Df m_v3SkyColorTop, m_v3SkyColorBottom;
 	CScreenSpaceShader* m_pSkyboxScreenSpace;
-	FrameBufferObject* m_pSkyboxFBO;
-	CFrameBuffer* m_pSkyBoxNewFBO;
+	CFrameBuffer* m_pSkyBoxNew;
 	TColorPreset m_sPresetSunset, m_sHighSunPreset;
 	CWindow* m_pWindow;
 
 	bool m_bManualOverride;
+
+	// Night Uniformms
+	bool m_bIsNight;
+	float m_fStarDensity, m_fStarBrightness;
+
+	// Sun Uniforms
+	float m_fSunSizeDay, m_fSunSizeNight, m_fSunCoreIntensity;
 };

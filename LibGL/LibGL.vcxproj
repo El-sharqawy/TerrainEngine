@@ -70,7 +70,6 @@
     <ClInclude Include="source\base_shader.h" />
     <ClInclude Include="source\camera.h" />
     <ClInclude Include="source\frame_buffer.h" />
-    <ClInclude Include="source\glad.h" />
     <ClInclude Include="source\mesh.h" />
     <ClInclude Include="source\model.h" />
     <ClInclude Include="source\screen.h" />

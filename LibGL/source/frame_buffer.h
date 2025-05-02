@@ -35,9 +35,14 @@ public:
 
 	void InitSkyBox(GLint iWidth, GLint iHeight);
 
+	void Destroy();
+
 	void Bind();
 
 	void BindForWriting();
+
+	void BindForReading();
+
 	void UnBindWriting();
 
 	void BindTextureForReading(GLenum eTextureUnit);
@@ -51,11 +56,32 @@ public:
 	GLuint GetDepthTextureID() const;
 	GLuint GetFrameBuffer() const;
 
+	GLint GetWidth() const;
+	GLint GetHeight() const;
+
 private:
 	GLint m_iWidth;
 	GLint m_iHeight;
 	GLuint m_uiFBO;
 	GLuint m_uiTextureBuffer;
 	GLuint m_uiDepthBuffer;
+	CSaveViewport m_gSaveViewport;
+};
+
+class CShadowFrameBuffer
+{
+public:
+	CShadowFrameBuffer();
+	~CShadowFrameBuffer();
+
+	bool Initialize(GLint iWidth, GLint iHeight);
+	void BindForWriting();
+	void BindTextureForReading(GLenum eTextureUnit);
+
+private:
+	GLint m_iWidth;
+	GLint m_iHeight;
+	GLuint m_uiFBO;
+	GLuint m_uiShadowMap;
 	CSaveViewport m_gSaveViewport;
 };

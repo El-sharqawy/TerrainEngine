@@ -158,6 +158,8 @@
     <ClCompile Include="source\userinterface.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="source\CommonDefines.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\userinterface.h" />
   </ItemGroup>
@@ -173,7 +175,11 @@
     <None Include="shaders\terrain.vert" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="icon1.ico" />
     <Image Include="texture.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="LibGame.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

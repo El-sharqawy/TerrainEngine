@@ -12,6 +12,11 @@ CFrameBuffer::CFrameBuffer() : m_gSaveViewport()
 
 CFrameBuffer::~CFrameBuffer()
 {
+	Destroy();
+}
+
+void CFrameBuffer::Destroy()
+{
 	if (m_uiFBO)
 	{
 		glDeleteFramebuffers(1, &m_uiFBO);
@@ -76,11 +81,11 @@ void CFrameBuffer::InitSkyBox(GLint iWidth, GLint iHeight)
 	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 	if (Status != GL_FRAMEBUFFER_COMPLETE)
 	{
-		sys_err("FrameBuffer::InitTest error, status: 0x%x\n", Status);
+		sys_err("FrameBuffer::InitSkyBox error, status: 0x%x\n", Status);
 		exit(0);
 	}
 
-	sys_log("CFrameBuffer::InitTest FrameBuffer: %u have been created", m_uiFBO);
+	sys_log("CFrameBuffer::InitSkyBox FrameBuffer: %u have been created", m_uiFBO);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -88,8 +93,6 @@ void CFrameBuffer::InitSkyBox(GLint iWidth, GLint iHeight)
 
 void CFrameBuffer::InitDSA(GLint iWidth, GLint iHeight)
 {
-	sys_log("CFrameBuffer::InitDSA");
-
 	glCreateFramebuffers(1, &m_uiFBO);
 
 	glCreateTextures(GL_TEXTURE_2D, 1, &m_uiTextureBuffer);
@@ -173,7 +176,6 @@ void CFrameBuffer::Bind()
 {
 	m_gSaveViewport.Save();
 
-	glBindTexture(GL_TEXTURE_2D, 0); //To make sure the texture isn't bound (does not clear the skybox framebuffer)
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_uiFBO);
 	glViewport(0, 0, m_iWidth, m_iHeight);
 	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -186,8 +188,16 @@ void CFrameBuffer::BindForWriting()
 	// Bind the framebuffer for drawing using DSA
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_uiFBO);
 	glViewport(0, 0, m_iWidth, m_iHeight);
-	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
+
+void CFrameBuffer::BindForReading()
+{
+	m_gSaveViewport.Save();
+
+	// Bind the framebuffer for reading using DSA
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_uiFBO);
+}
+
 
 void CFrameBuffer::BindToDefaultBuffer()
 {
@@ -250,21 +260,136 @@ GLuint CFrameBuffer::GetFrameBuffer() const
 
 void CFrameBuffer::Resize(GLint iNewWidth, GLint iNewHeight)
 {
+	if (iNewWidth == m_iWidth && iNewHeight == m_iHeight)
+		return; // No need to resize
+
 	m_iWidth = iNewWidth;
 	m_iHeight = iNewHeight;
 
-	// Resize color texture
-	if (IsGLVersionHigher(4, 5))
-	{
-		glTextureStorage2D(m_uiTextureBuffer, 1, GL_RGB8, m_iWidth, m_iHeight);
-		glTextureStorage2D(m_uiDepthBuffer, 1, GL_DEPTH_COMPONENT24, m_iWidth, m_iHeight);
-	}
-	else
-	{
-		glBindTexture(GL_TEXTURE_2D, m_uiTextureBuffer);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_iWidth, m_iHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+	Destroy();
 
-		glBindTexture(GL_TEXTURE_2D, m_uiDepthBuffer);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_iWidth, m_iHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+	Init(iNewWidth, iNewHeight);
+}
+
+GLint CFrameBuffer::GetWidth() const
+{
+	return (m_iWidth);
+}
+
+GLint CFrameBuffer::GetHeight() const
+{
+	return (m_iHeight);
+}
+
+CShadowFrameBuffer::CShadowFrameBuffer() : m_gSaveViewport()
+{
+	m_iWidth = 0;
+	m_iHeight = 0;
+	m_uiFBO = 0;
+	m_uiShadowMap = 0;
+}
+
+CShadowFrameBuffer::~CShadowFrameBuffer()
+{
+
+}
+
+bool CShadowFrameBuffer::Initialize(GLint iWidth, GLint iHeight)
+{
+	m_iWidth = iWidth;
+	m_iHeight = iHeight;
+
+	/*if (IsGLVersionHigher(4, 5))
+	{
+		// Create Shadow FrameBuffer
+		glCreateFramebuffers(1, &m_uiFBO);
+
+		// Create Shadow Texture
+		glCreateTextures(GL_TEXTURE_2D, 1, &m_uiShadowMap);
+		glTextureStorage2D(m_uiShadowMap, 0, GL_DEPTH_COMPONENT24, m_iWidth, m_iHeight);
+		glTextureParameteri(m_uiShadowMap, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTextureParameteri(m_uiShadowMap, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTextureParameteri(m_uiShadowMap, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTextureParameteri(m_uiShadowMap, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		glNamedFramebufferTexture(m_uiFBO, GL_DEPTH_ATTACHMENT, m_uiShadowMap, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_uiShadowMap, 0);
+
+		// Disable Writing to Color Buffer
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+
+		GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if (Status != GL_FRAMEBUFFER_COMPLETE)
+		{
+			sys_err("CShadowFrameBuffer::Initialize error, status: 0x%x\n", Status);
+			return false;
+		}
+
+		sys_log("CShadowFrameBuffer::Initialize FrameBuffer: %u have been created", m_uiFBO);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+	else*/
+	{
+		// Create Shadow FrameBuffer
+		glGenFramebuffers(1, &m_uiFBO);
+
+		// Create Shadow Texture
+		glGenTextures(1, &m_uiShadowMap);
+		glBindTexture(GL_TEXTURE_2D, m_uiShadowMap);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, iWidth, iHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		glTexParameteri(m_uiShadowMap, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(m_uiShadowMap, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(m_uiShadowMap, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(m_uiShadowMap, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, m_uiFBO);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_uiShadowMap, 0);
+
+		// Disable Writing to Color Buffer
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+
+		GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if (Status != GL_FRAMEBUFFER_COMPLETE)
+		{
+			sys_err("CShadowFrameBuffer::Initialize error, status: 0x%x\n", Status);
+			return false;
+		}
+
+		sys_log("CShadowFrameBuffer::Initialize FrameBuffer: %u have been created", m_uiFBO);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
+	return (true);
+}
+
+void CShadowFrameBuffer::BindForWriting()
+{
+	/*if (IsGLVersionHigher(4, 5))
+	{
+	}
+	else*/
+	{
+		m_gSaveViewport.Save();
+
+		// Bind the framebuffer for drawing using DSA
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_uiFBO);
+		glViewport(0, 0, m_iWidth, m_iHeight); // (The Width and Height of the Shadow Map)
+	}
+}
+
+void CShadowFrameBuffer::BindTextureForReading(GLenum eTextureUnit)
+{
+	/*if (IsGLVersionHigher(4, 5))
+	{
+		glBindTextureUnit(eTextureUnit - GL_TEXTURE0, m_uiShadowMap);
+	}
+	else*/
+	{
+		glActiveTexture(eTextureUnit);
+		glBindTexture(GL_TEXTURE_2D, m_uiShadowMap);
 	}
 }

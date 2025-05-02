@@ -44,6 +44,9 @@
 
 #include <glm/glm.hpp>
 #include "vectors.h"
+#include <glad/glad.h>
+
+#include "../../LibGL/source/stb_image.h"
 
 class CMatrix4Df;
 struct SVector3Df;
@@ -52,7 +55,7 @@ struct SVector3Df;
 #define SNPRINTF _snprintf_s
 #define VSNPRINTF vsnprintf_s
 #define RANDOM rand
-#define SRANDOM srand((unsigned int)time(nullptr))
+#define SRANDOM() srand((unsigned int)time(nullptr))
 #pragma warning (disable: 4566)
 #else
 #define SNPRINTF snprintf
@@ -351,6 +354,35 @@ extern bool IsPointInsideViewFrustum(const SVector3Df& v3Point, const CMatrix4Df
 
 extern bool ReadFile(const char* fileName, std::string& outFile);
 
+extern bool IntersectTriangle(const SVector3Df& c_orig,
+    const SVector3Df& c_dir,
+    const SVector3Df& c_v0,
+    const SVector3Df& c_v1,
+    const SVector3Df& c_v2,
+    float* pu,
+    float* pv,
+    float* pt);
+
+// Moller–Trumbore algorithm
+extern bool IntersectTriangleNew(const SVector3Df& rayOrigin,
+    const SVector3Df& rayDir,
+    const SVector3Df& v0,
+    const SVector3Df& v1,
+    const SVector3Df& v2,
+    float* outU, float* outV, float* outT);
+
+extern bool IntersectQuad(const SVector3Df& O,         // ray origin
+    const SVector3Df& D,                        // ray direction (normalized)
+    const SVector3Df& v0,                       // quad corner 0
+    const SVector3Df& v1,                       // quad corner 1
+    const SVector3Df& v2,                       // quad corner 2
+    const SVector3Df& v3,                       // quad corner 3
+    SVector3Df& outPoint,                       // where we store the hit
+    float& outT);                               // ray parameter
+
+extern bool RayIntersectsAABB(const SVector3Df& rayOrigin, const SVector3Df& rayDir,
+    const SVector3Df& aabbMin, const SVector3Df& aabbMax);
+
 namespace MyMath
 {
     inline float fmin(float fMin, float fMax)
@@ -400,5 +432,10 @@ namespace MyMath
         z = dis(gen);
 
         return SVector3Df(x, y, z);
+    }
+
+    inline GLint iceil(GLint n, GLint d)
+    {
+        return static_cast<GLint>(std::ceil(static_cast<GLfloat>(n / d)));
     }
 }

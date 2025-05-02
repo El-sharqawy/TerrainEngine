@@ -14,7 +14,7 @@
 #include "model.h"
 
 #define INVALID_MATERIAL 0xFFFFFFFF
-#define ASSIMP_LOAD_FLAGS (aiProcess_JoinIdenticalVertices |    \
+#define ASSIMP_LOAD_FLAGS_UV_FLIP (aiProcess_JoinIdenticalVertices |    \
                            aiProcess_Triangulate |              \
                            aiProcess_GenSmoothNormals |         \
                            aiProcess_LimitBoneWeights |         \
@@ -27,12 +27,24 @@
 						   aiProcess_FlipUVs |					\
                            aiProcess_CalcTangentSpace)
 
+#define ASSIMP_LOAD_FLAGS (aiProcess_JoinIdenticalVertices |    \
+                           aiProcess_Triangulate |              \
+                           aiProcess_GenSmoothNormals |         \
+                           aiProcess_LimitBoneWeights |         \
+                           aiProcess_SplitLargeMeshes |         \
+                           aiProcess_ImproveCacheLocality |     \
+                           aiProcess_RemoveRedundantMaterials | \
+                           aiProcess_FindDegenerates |          \
+                           aiProcess_FindInvalidData |          \
+                           aiProcess_GenUVCoords |              \
+                           aiProcess_CalcTangentSpace)
+
 #define POSITION_LOCATION  0
 #define NORMALS_LOCATION    1
 #define TEX_COORDS_LOCATION 2
 
 #define GLCheckError() (glGetError() == GL_NO_ERROR)
-#define USE_MESH_OPRIMIZER
+//#define USE_MESH_OPRIMIZER
 #define ENABLE_PRINT_MESH_DATA
 
 class CMesh : public CModel
@@ -41,7 +53,7 @@ public:
 	CMesh() = default;
 	~CMesh();
 
-	bool LoadMesh(const std::string& stFileName);
+	bool LoadMesh(const std::string& stFileName, bool bIsUVFlipped = false);
 	void Render();
 	void Render(GLuint uiDrawIndex, GLuint uiPrimID);
 	void Render(GLuint uiNumInstances, const CMatrix4Df* matWVP, const CMatrix4Df* matWorld);

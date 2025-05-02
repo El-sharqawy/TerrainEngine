@@ -372,6 +372,21 @@ struct SVector2Df
 	SVector2Df(float _x, float _y);
 
 	/**
+	 * Constructs an SVector2Df object with both x and y components initialized to the same value.
+	 *
+	 * @param fVal The initial value for both x and y components.
+	 */
+	SVector2Df(int iVal);
+
+	/**
+	 * Constructs an SVector2Df object with specified x and y components.
+	 *
+	 * @param _x The initial value for the x component.
+	 * @param _y The initial value for the y component.
+	 */
+	SVector2Df(int _x, int _y);
+
+	/**
 	 * Constructs an SVector2Df object by copying the components from a glm::vec2 vector.
 	 *
 	 * @param vec The glm::vec2 vector to copy from.
@@ -1347,6 +1362,14 @@ struct SVector3Df
 	float distance(const SVector3Df& vec) const;
 
 	/**
+	 * Calculates the Angle between two SVector3Df objects.
+	 *
+	 * @param vec The SVector3Df object to calculate the angle with in Radian.
+	 * @return The angle between the two vectors.
+	 */
+	float angle(const SVector3Df& vec) const;
+
+	/**
 	 * Negates all components of the SVector3Df object.
 	 *
 	 * @return The negated SVector3Df object.
@@ -1621,6 +1644,26 @@ struct SVector4Df
 	 * @return true if the two objects are not equal, false otherwise.
 	 */
 	bool operator != (const SVector4Df& vec);
+
+	float& operator[](size_t index) {
+		switch (index) {
+		case 0: return x;
+		case 1: return y;
+		case 2: return z;
+		case 3: return w;
+		default: throw std::out_of_range("Invalid index");
+		}
+	}
+
+	const float& operator[](size_t index) const {
+		switch (index) {
+		case 0: return x;
+		case 1: return y;
+		case 2: return z;
+		case 3: return w;
+		default: throw std::out_of_range("Invalid index");
+		}
+	}
 
 
 	/**

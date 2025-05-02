@@ -1,16 +1,16 @@
 #pragma once
 
 #include "../../LibMath/source/stdafx.h"
-#include "skybox_framebuffer.h"
+#include "../../LibGL/source/frame_buffer.h"
 
-struct SSceneElements
+typedef struct SSceneElements
 {
 	SVector3Df v3LightPos, v3LightColor, v3LightDir, v3FogColor, v3Seed;
 	CMatrix4Df mProjMatrix;
 	CCamera* pCamera;
-	FrameBufferObject* pSceneFBO;
+	CFrameBuffer* pSceneFBO;
 	bool bWireFrame = false;
-};
+} TSceneElements;
 
 class CObject
 {
@@ -20,6 +20,8 @@ public:
 
 	//if the class will cointain some logic, so it must be refreshed at each game loop cycle by calling update. Otherwise just don't override it.  
 	virtual void Update() {}
+
+	bool bRender = false;
 
 	inline static SSceneElements* pScene;
 };

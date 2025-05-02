@@ -65,10 +65,7 @@ public:
 		m_iRows = Rows;
 		m_iGridSize = Cols * Rows;
 
-		if (m_pGrid)
-		{
-			safe_delete_arr(m_pGrid);
-		}
+		safe_free(m_pGrid);
 
 		//m_pGrid = std::make_unique<T[]>(static_cast<size_t>(Cols) * static_cast<size_t>(Rows) * sizeof(T));
 		m_pGrid = (T*)malloc(Cols * Rows * sizeof(T));
@@ -81,10 +78,7 @@ public:
 		m_iRows = Rows;
 		m_iGridSize = Cols * Rows;
 
-		if (m_pGrid)
-		{
-			safe_delete_arr(m_pGrid);
-		}
+		safe_free(m_pGrid);
 
 		m_pGrid = (T*)pData;
 
@@ -94,10 +88,7 @@ public:
 	// is it really needed?
 	void Destroy()
 	{
-		if (m_pGrid)
-		{
-			safe_delete_arr(m_pGrid);
-		}
+		safe_free(m_pGrid);
 	}
 
 	size_t CalculateIndex(GLint Col, GLint Row) const
@@ -190,6 +181,32 @@ public:
 		}
 	}
 
+	/**
+	 * Normalize the grid values to a specified range.
+	 *
+	 * This function normalizes the values in the grid (`m_pGrid`) to a new range defined
+	 * by `MinRange` and `MaxRange`. The normalization is done by first calculating the
+	 * minimum and maximum values in the grid, then mapping these values to the desired
+	 * range while preserving the relative scale between grid values.
+	 *
+	 * The algorithm performs the following steps:
+	 * 1. Retrieves the minimum (`Min`) and maximum (`Max`) values from the grid using
+	 *    the `GetMinMax` function.
+	 * 2. If the maximum value is less than or equal to the minimum value, no normalization
+	 *    is performed and the function returns early.
+	 * 3. Calculates the range between the minimum and maximum values (`MinMaxDelta`).
+	 * 4. Calculates the target range between `MinRange` and `MaxRange` (`MinMaxRange`).
+	 * 5. Iterates through each element of the grid and normalizes the value using the
+	 *    formula:
+	 *      ((value - Min) / MinMaxDelta) * MinMaxRange + MinRange
+	 *    This formula maps the grid value from the original range `[Min, Max]` to the
+	 *    new range `[MinRange, MaxRange]`.
+	 *
+	 * @param MinRange: The lower bound of the target range.
+	 * @param MaxRange: The upper bound of the target range.
+	 *
+	 * @return: None
+	 */
 	void Normalize(T MinRange, T MaxRange)
 	{
 		T Min, Max;

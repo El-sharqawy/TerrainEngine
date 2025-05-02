@@ -443,6 +443,28 @@ SVector2Df::SVector2Df(float _x, float _y)
 }
 
 /**
+ * Constructs an SVector2Df object with both x and y components initialized to the same value.
+ *
+ * @param fVal The initial value for both x and y components.
+ */
+SVector2Df::SVector2Df(int iVal)
+{
+	x = y = static_cast<float>(iVal);
+}
+
+/**
+ * Constructs an SVector2Df object with specified x and y components.
+ *
+ * @param _x The initial value for the x component.
+ * @param _y The initial value for the y component.
+ */
+SVector2Df::SVector2Df(int _x, int _y)
+{
+	x = static_cast<float>(_x);
+	y = static_cast<float>(_y);
+}
+
+/**
  * Constructs an SVector2Df object by copying the components from a glm::vec2 vector.
  *
  * @param vec The glm::vec2 vector to copy from.
@@ -1791,7 +1813,7 @@ void SVector3Df::print(bool bEndl) const
 float SVector3Df::length() const
 {
 	float fLen = std::sqrtf(x * x + y * y + z * z); // works
-	return (fLen);
+	return (std::abs(fLen));
 }
 
 /**
@@ -1857,16 +1879,16 @@ SVector3Df SVector3Df::cross(const SVector3Df& vec) const
  */
 void SVector3Df::rotate(const float fAngle, const SVector3Df& vec)
 {
-	// Convert the vector to a quaternion with w = 0
 	QUAT vectorQuat;
+	// Convert the vector to a quaternion with w = 0
 	Quaternion_Set(0.0, x, y, z, &vectorQuat);
 
-	// Create the quaternion from the axis and angle
 	QUAT rotationQuat;
+	// Create the quaternion from the axis and angle
 	Quaternion_FromAxisAngle(vec, fAngle, &rotationQuat); // Convert angle to radians
 
-	// Compute the conjugate of the rotation quaternion
 	QUAT conjugateQuat;
+	// Compute the conjugate of the rotation quaternion
 	Quaternion_Conjugate(&rotationQuat, &conjugateQuat);
 
 	// Perform the quaternion multiplication: q * v * q^-1
@@ -1895,6 +1917,26 @@ float SVector3Df::distance(const SVector3Df& vec) const
 
 	float distance = sqrtf(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
 	return (distance);
+}
+
+/**
+ * Calculates the Angle between two SVector3Df objects.
+ *
+ * @param vec The SVector3Df object to calculate the angle0 with.
+ * @return The angle between the two vectors.
+ */
+float SVector3Df::angle(const SVector3Df& vec) const
+{
+	float dot = this->dot(vec);
+	float lenA = length();
+	float lenB = vec.length();
+
+	if (lenA == 0.0f || lenB == 0.0f)
+		return 0.0f; // Avoid division by zero
+
+	float cosTheta = dot / (lenA * lenB);
+	cosTheta = std::fmax(-1.0f, std::fmin(1.0f, cosTheta)); // Clamp to avoid domain error
+	return std::acos(cosTheta); // in radians
 }
 
 /**
@@ -2513,4 +2555,3 @@ SVector4Df operator/(const SVector4Df& vec1, const SVector4Df& vec2)
 	return (Result);
 
 }
-

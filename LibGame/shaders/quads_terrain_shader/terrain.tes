@@ -1,0 +1,78 @@
+#version 460 core
+
+// Tessellation Evaluation Shader (TES) for terrain generation
+// This shader is responsible for evaluating the tessellated vertices and
+// sampling the height from a height map texture to create a terrain mesh.
+// It takes the tessellated vertices and interpolates their positions and texture coordinates.
+// The shader also applies a height offset to the vertices based on the sampled height from the texture.
+// The final vertex positions are transformed from world space to clip space using the provided view-projection matrix.
+// The shader uses a height map texture to determine the height of the terrain at each vertex.
+// The tessellation is done in quads, and the shader uses the tessellation coordinates to interpolate the vertex positions and texture coordinates.
+// The shader outputs the final vertex positions and texture coordinates to be used in the next stage of the rendering pipeline.
+
+layout (quads, fractional_odd_spacing, ccw) in;
+
+in vec2 TexTcs[];
+out vec2 TexTes;
+
+in vec4 v4BlendWeightsOut[]; // coming from TCS
+out vec4 v4BlendWeights;  // to Fragment Shader
+
+in vec3 NormalsTcs[];
+out vec3 NormalsPos;
+
+out vec3 WorldPos;
+out float fHeight;
+
+uniform sampler2D HeightMapTex;
+uniform mat4 mat4ViewProjection;
+
+vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
+{
+    // Interpolate between three 3D vectors
+    return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
+}
+
+void main()
+{
+    // get the results from the tessellator
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+
+    // get the texture coordinate for each vertex
+    vec2 t00 = TexTcs[0]; // bottom left
+    vec2 t01 = TexTcs[1]; // bottom right
+    vec2 t10 = TexTcs[2]; // top left
+    vec2 t11 = TexTcs[3]; // top right
+
+    vec2 t0 = (t01 - t00) * u + t00; // interpolate bottom
+    vec2 t1 = (t11 - t10) * u + t10; // interpolate top
+    TexTes = (t1 - t0) * v + t0; // final interpolation
+
+    // get the height from the height map (sample the height from the height map)
+    fHeight = texture(HeightMapTex, TexTes).x;
+
+    // get the position of each vertex
+    vec4 p00 = gl_in[0].gl_Position; // bottom left
+    vec4 p01 = gl_in[1].gl_Position; // bottom right
+    vec4 p10 = gl_in[2].gl_Position; // top left
+    vec4 p11 = gl_in[3].gl_Position; // top right
+
+    // same interpolation as the previous one
+	vec4 p0 = (p01 - p00) * u + p00; // interpolate bottom
+    vec4 p1 = (p11 - p10) * u + p10; // interpolate top
+    vec4 p = (p1 - p0) * v + p0; // final interpolation
+
+    // add the sample height
+    //p.y += fHeight;
+
+    // set the world position of the vertex
+    WorldPos = p.xyz;
+
+    // transfer the blend weights from TCS to TES output
+    v4BlendWeights = v4BlendWeightsOut[0];
+    NormalsPos = NormalsTcs[0];
+
+    // transform from world to clip space
+    gl_Position = mat4ViewProjection * p;
+}

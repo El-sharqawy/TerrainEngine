@@ -6,7 +6,7 @@
 class CScreenSpaceShader : public CObject
 {
 public:
-	CScreenSpaceShader(const std::string& stFragmentShader, const std::string& stName);
+	CScreenSpaceShader(const std::string& stFragmentShader, const std::string& stName = "ScreenSpaceShader");
 	~CScreenSpaceShader();
 
 	CShader* const GetShaderPtr();
