@@ -38,8 +38,6 @@ uniform vec3 u_HitPosition;
 uniform float u_HitRadius = 50.0f;
 uniform bool u_HasHit = false;
 
-uniform float fColorTexcoordScaling = 1.0; // Number of times to be repeated per patch!
-
 uniform vec2 numPatches;      // pass (m_iNumPatchesX, m_iNumPatchesZ)
 
 
@@ -67,7 +65,7 @@ void main()
         uint ti = texIndices[i];
         if (weights[i] > 0.001 && ti < textures.length())
         {
-            albedo += texture(textures[ti], uv_patch * fColorTexcoordScaling).rgb * weights[i];
+            albedo += texture(textures[ti], uv_patch).rgb * weights[i];
         }
     }
 
@@ -85,12 +83,39 @@ void main()
     vec3 specular = spec * v3LightColor;
 
     float totalWeight = weights[0] + weights[1] + weights[2] + weights[3];
+
+    // Hit effect (brush circle)
+    if (u_HasHit)
+    {
+        // Calculate the distance from the current pixel's world position to the hit position
+        float dist = length(v3WorldPos.xz - u_HitPosition.xz);
+        float edge = 2.0; // Softness for the ring edges
+    
+        // Smoothstep to get a smooth transition from the hit position to the ring edge
+        float circle = 1.0 - smoothstep(u_HitRadius - edge, u_HitRadius, dist);
+    
+        // Thickness of the ring
+        float thickness = 0.3;
+        float ring = smoothstep(u_HitRadius - thickness, u_HitRadius, dist) * 
+                     (1.0 - smoothstep(u_HitRadius, u_HitRadius + thickness, dist));
+
+        // Define the solid color for the ring (e.g., red)
+        vec3 ringColor = vec3(1.0, 0.2, 0.2); // Red for the ring
+    
+        // Ensure the ring is fully visible by replacing albedo within the ring area
+        // The circle effect is only visible within the ring area
+        albedo = mix(albedo, ringColor, ring);  // This replaces the color with the solid ring color
+
+        // You can also add transparency if needed for the ring
+        // albedo = mix(albedo, ringColor, ring);  // Adjust ring visibility (solid)
+    }
+
     if (totalWeight > 0.0)
 	{
         FragColor = vec4(albedo, totalWeight);
 	}
     else
     {
-        FragColor = texture(textures[0], uv_patch * fColorTexcoordScaling);
+        FragColor = texture(textures[0], uv_patch);
     }
 }

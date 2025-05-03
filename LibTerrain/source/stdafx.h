@@ -74,4 +74,5 @@ inline GLfloat cast_floati(GLint fNum)
 	return (static_cast<GLfloat>(fNum));
 }
 
+
 #endif //STDAFX_H

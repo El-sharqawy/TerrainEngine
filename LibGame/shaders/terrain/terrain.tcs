@@ -33,7 +33,7 @@ float GetTessellationLevel(float fDistance0, float fDistance1)
     }
     else
     {
-        return 1.0f; // Very far = no extra tessellation
+        return 0.0f; // Very far = no extra tessellation
     }
 }
 

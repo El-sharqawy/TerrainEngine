@@ -10,6 +10,7 @@ typedef struct SSceneElements
 	CCamera* pCamera;
 	CFrameBuffer* pSceneFBO;
 	bool bWireFrame = false;
+	bool bRenderChar = false;
 } TSceneElements;
 
 class CObject

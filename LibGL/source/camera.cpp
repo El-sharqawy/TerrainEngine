@@ -7,7 +7,7 @@ static float EDGE_STEP = 0.01f;
 
 CCamera::CCamera()
 {
-	TPersProjInfo PersProjInfo = { 45.0f, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, 0.1f, 2000.0f };
+	TPersProjInfo PersProjInfo = { 45.0f, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, 0.1f, 5000.0f };
 
 	// For NonTerrain:
 	//const SVector3Df v3Pos = SVector3Df(0.0f, 0.0f, 0.0f);
@@ -15,7 +15,7 @@ CCamera::CCamera()
 
 	// For Terrain:
 	const SVector3Df v3Pos = SVector3Df(100.0f, 220.0f, 400.0f);
-	const SVector3Df v3Target = SVector3Df(0.0f, -0.25f, 1.0f);
+	const SVector3Df v3Target = SVector3Df(0.0f, 0.0f, 1.0f);
 
 	const SVector3Df v3Up = SVector3Df(0.0f, 1.0f, 0.0f);
 	InitCamera(PersProjInfo, v3Pos, v3Target, v3Up);

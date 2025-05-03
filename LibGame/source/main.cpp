@@ -122,10 +122,10 @@ static void InitTerrain()
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &iMaxTextureSize);
 
 	float WorldScale = 1.0f;
-	float TextureScale = 1.0f;
+	float TextureScale = 1.f;
 
-	GLint iSize = 513;
-	GLint iPatchSize = 33;
+	GLint iSize = 512 + 1;
+	GLint iPatchSize = 32 + 1;
 
 	CBaseTerrain::Instance().InitializeTerrain(iSize, iPatchSize, WorldScale, TextureScale);
 
@@ -148,7 +148,7 @@ static void InitTerrain()
 
 	worldTransform = &pMesh->GetWorldTranslation();
 
-	worldTransform->SetScale(0.1f);
+	worldTransform->SetScale(1.0f);
 	worldTransform->Rotate(0.0f, 0.0f, 0.0f);
 
 	// TODO: Initialize shaderProgram with a basic line shader
@@ -191,7 +191,9 @@ static void RenderSceneNew(const float deltaTime)
 	pMeshShader->setMat4("gWVP", WVP);
 
 
-	pMesh->Render();
+	auto scene = CObject::pScene;
+	if (scene->bRenderChar)
+		pMesh->Render();
 
 	double mouseX, mouseY;
 	GLint winW, winH;

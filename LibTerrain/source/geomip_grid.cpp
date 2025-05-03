@@ -16,7 +16,6 @@ CGeoMipGrid::CGeoMipGrid()
 	m_uiVAO = 0;
 	m_uiVBO = 0;
 	m_uiIdxBuf = 0;
-	m_iMaxLOD = 0;
 	m_iPatchSize = 0;
 	m_iMaxLOD = 0;
 	m_iNumPatchesX = 0;
@@ -291,18 +290,27 @@ GLint CGeoMipGrid::CalculateNumIndices() const
 
 void CGeoMipGrid::TVertex::InitVertex(CBaseTerrain* pTerrain, GLint x, GLint z)
 {
-	SVector3Df pos = pTerrain->GetWorldTranslation()->GetPosition();
+    // Terrain world position base
+    SVector3Df pos = pTerrain->GetWorldTranslation()->GetPosition();
 
-	const float y = pTerrain->GetHeight(x, z);
-	const float WorldScale = pTerrain->GetWorldScale();
-	m_v3Pos = SVector3Df(x * WorldScale, y, z * WorldScale);
+	// World-space coordinates
+	const float worldScale = pTerrain->GetWorldScale();
+	const float worldX = x * worldScale;
+	const float worldZ = z * worldScale;
+	const float height = pTerrain->GetHeight(x, z);
 
-	const float fSize = static_cast<float>(pTerrain->GetSize());
-	const float TextureScale = pTerrain->GetTextureScale();
-	const float fXCoord = TextureScale * x / fSize;
-	const float fzCoord = TextureScale * z / fSize;
+    // World-space position
+    m_v3Pos = SVector3Df(worldX, height, worldZ);
+
+	const float fSize = static_cast<float>(pTerrain->GetSize() - 1);
+
+	const float TextureScale = pTerrain->GetTextureScale(); // E.g., 0.1 means 10m per texture repeat
+
+	const float fXCoord = (TextureScale * x) / fSize;
+	const float fzCoord = (TextureScale * z) / fSize;
 
 	m_v2TexCoords = SVector2Df(fXCoord, fzCoord);
+
 	m_v3Normals = SVector3Df(0.0f);
 }
 
@@ -990,24 +998,13 @@ void CGeoMipGrid::UploadSplatBindings()
 
 void CGeoMipGrid::PaintSplatmap(const TBrushParams& brush)
 {
-	const float radius = brush.fRadius;
-
-	// Determine which patches intersect the brush
-	const glm::vec2 brushMin = glm::vec2(brush.v2WorldPos.x, brush.v2WorldPos.y) - glm::vec2(radius);
-	const glm::vec2 brushMax = glm::vec2(brush.v2WorldPos.x, brush.v2WorldPos.y) + glm::vec2(radius);
-
-	const glm::ivec2 minPatch = GetPatchIndexFromWorldPos2D(brushMin); // returns (x, y)
-	const glm::ivec2 maxPatch = GetPatchIndexFromWorldPos2D(brushMax);
-
-	for (int py = minPatch.y; py <= maxPatch.y; ++py)
+	// Iterate over all patches
+	for (int i = 0; i < m_vSplatData.size(); ++i)
 	{
-		for (int px = minPatch.x; px <= maxPatch.x; ++px)
+		if (BrushIntersectsPatch(i, brush))
 		{
-			const int patchIndex = GetPatchLinearIndex(px, py);
-			if (patchIndex < 0 || patchIndex >= m_vSplatData.size())
-				continue;
-
-			PaintBrushOnSinglePatch(brush, patchIndex);
+			// Paint on the overlapping patch
+			PaintBrushOnSinglePatch(brush, i);
 		}
 	}
 }
@@ -1016,8 +1013,8 @@ void CGeoMipGrid::PaintBrushOnSinglePatch(const TBrushParams& brush, int iPatchI
 {
 	auto& patchData = m_vSplatData[iPatchIndex];
 	const GLint R = m_iSplatTexResolution;
-	const float worldScale = m_iPatchSize * m_fWorldScale;
-	const float fTexelSize = worldScale / R;
+	float patchWorldSize = (m_iPatchSize - 1) * m_fWorldScale;
+	const float fTexelSize = patchWorldSize / R;
 	const float radius = brush.fRadius;
 	const float radiusTex = radius / fTexelSize;
 
@@ -1026,10 +1023,11 @@ void CGeoMipGrid::PaintBrushOnSinglePatch(const TBrushParams& brush, int iPatchI
 	const glm::vec2 patchOrigin = GetPatchOrigin(iPatchIndex);
 	const glm::vec2 localCenter = (brushCenterWS - patchOrigin) / fTexelSize;
 
-	const int x0 = std::max(0, static_cast<int>(floor(localCenter.x - radiusTex)));
-	const int x1 = std::min(R - 1, static_cast<int>(ceil(localCenter.x + radiusTex)));
-	const int y0 = std::max(0, static_cast<int>(floor(localCenter.y - radiusTex)));
-	const int y1 = std::min(R - 1, static_cast<int>(ceil(localCenter.y + radiusTex)));
+	int pad = 1;
+	const int x0 = std::max(0, static_cast<int>(floor(localCenter.x - radiusTex)) - pad);
+	const int x1 = std::min(R - 1, static_cast<int>(ceil(localCenter.x + radiusTex)) + pad);
+	const int y0 = std::max(0, static_cast<int>(floor(localCenter.y - radiusTex)) - pad);
+	const int y1 = std::min(R - 1, static_cast<int>(ceil(localCenter.y + radiusTex)) + pad);
 
 	// Pre-calculate brush parameters
 	const float innerRadius = radiusTex * 0.85f;
@@ -1136,7 +1134,7 @@ glm::vec2 CGeoMipGrid::GetPatchOrigin(int patchIndex) const
 {
 	const int px = patchIndex % m_iNumPatchesX;
 	const int pz = patchIndex / m_iNumPatchesX;
-	return glm::vec2(px, pz) * float(m_iPatchSize) * m_fWorldScale;
+	return glm::vec2(px * (m_iPatchSize - 1) * m_fWorldScale, pz * (m_iPatchSize - 1) * m_fWorldScale);
 }
 
 void CGeoMipGrid::ResetAllSplatmapsToBaseTexture()
@@ -1167,4 +1165,39 @@ int CGeoMipGrid::GetPatchLinearIndex(int px, int py)
 		return -1;
 
 	return py * m_iNumPatchesX + px;
+}
+
+bool CGeoMipGrid::BrushIntersectsPatch(int patchIndex, const TBrushParams& brush)
+{
+	auto& patchData = m_vSplatData[patchIndex];
+	const float fTexelSize = m_iPatchSize * m_fWorldScale / m_iSplatTexResolution;
+
+	// Compute brush bounds in world space
+	const glm::vec2 brushCenterWS = glm::vec2(brush.v2WorldPos.x, brush.v2WorldPos.y);
+	const glm::vec2 patchOrigin = GetPatchOrigin(patchIndex);
+	const glm::vec2 localCenter = (brushCenterWS - patchOrigin) / fTexelSize;
+
+	const float radiusTex = brush.fRadius / fTexelSize;
+	const int x0 = std::max(0, static_cast<int>(floor(localCenter.x - radiusTex)) - 1);
+	const int x1 = std::min(m_iSplatTexResolution - 1, static_cast<int>(ceil(localCenter.x + radiusTex)) + 1);
+	const int y0 = std::max(0, static_cast<int>(floor(localCenter.y - radiusTex)) - 1);
+	const int y1 = std::min(m_iSplatTexResolution - 1, static_cast<int>(ceil(localCenter.y + radiusTex)) + 1);
+
+	// Check if any texels within the brush's radius intersect this patch
+	for (int y = y0; y <= y1; ++y)
+	{
+		for (int x = x0; x <= x1; ++x)
+		{
+			float dx = (x + 0.5f) - localCenter.x;
+			float dy = (y + 0.5f) - localCenter.y;
+			float dist = sqrtf(dx * dx + dy * dy);
+
+			if (dist <= radiusTex)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }

@@ -31,6 +31,8 @@ CWindow::CWindow()
 	m_bMouseState.at(1) = GLFW_RELEASE;
 	m_bIsMouseFocusedIn = true;
 	m_eBrushType = BRUSH_TYPE_NONE;
+	m_fBrushInterval = 0.5f;
+	m_fBrushTimer = 0.0f;
 #if defined(_WIN64)
 	m_uiRandSeed = 0;
 #else
@@ -186,9 +188,12 @@ void CWindow::mouse_button_callback(GLFWwindow* window, int button, int action, 
 			appWnd->GetCamera()->SetLock(false);
 		}
 	}
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+	if (button == GLFW_MOUSE_BUTTON_LEFT)
 	{
-		CScreen::Instance().ApplyTerrainBrush(appWnd->GetBrushType());
+		if (action == GLFW_PRESS || action == GLFW_REPEAT)
+		{
+			CScreen::Instance().ApplyTerrainBrush(appWnd->GetBrushType());
+		}
 	}
 }
 
@@ -210,6 +215,8 @@ void CWindow::scroll_callback(GLFWwindow* window, double xoffset, double yoffset
 
 void CWindow::ProcessInput(float deltaTime)
 {
+	m_fBrushTimer += deltaTime;
+
 	if (glfwGetKey(m_pWindow, GLFW_KEY_W))
 	{
 		GetCamera()->ProcessKeyboardInput(DIRECTION_FORWARD, deltaTime);
@@ -225,6 +232,24 @@ void CWindow::ProcessInput(float deltaTime)
 	if (glfwGetKey(m_pWindow, GLFW_KEY_A))
 	{
 		GetCamera()->ProcessKeyboardInput(DIRECTION_LEFT, deltaTime);
+	}
+
+	if (glfwGetMouseButton(GetWindow(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+	{
+		if (m_eBrushType == BRUSH_TYPE_TEXTURE)
+		{
+			m_fBrushInterval = 0.1f;
+		}
+		else
+		{
+			m_fBrushInterval = 0.5f;
+		}
+
+		if (m_fBrushTimer >= m_fBrushInterval)
+		{
+			CScreen::Instance().ApplyTerrainBrush(GetBrushType());
+			m_fBrushTimer = 0.0f;  // Reset the timer after applying the brush
+		}
 	}
 }
 

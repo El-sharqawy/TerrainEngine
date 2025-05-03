@@ -64,6 +64,10 @@ void CUserInterface::RenderTerrainUI()
 	if (ImGui::Checkbox("Terrain Editing mode", &bEditMode))
 	{
 		CScreen::Instance().SetEditingMode(bEditMode);
+		if (CScreen::Instance().GetTextureEditMode())
+		{
+			CScreen::Instance().SetTextureEditMode(!bEditMode);
+		}
 	}
 
 								// 0		// 1		// 2			// 3			// 4			// 5		
@@ -141,6 +145,16 @@ void CUserInterface::RenderTerrainUI()
 	ImGui::NewLine();
 	ImGui::NewLine();
 
+	bool bEditTexMode = CScreen::Instance().GetTextureEditMode();
+	if (ImGui::Checkbox("Terrain Texture mode", &bEditTexMode))
+	{
+		CScreen::Instance().SetTextureEditMode(bEditTexMode);
+		if (CScreen::Instance().GetEditingMode())
+		{
+			CScreen::Instance().SetEditingMode(!bEditTexMode);
+		}
+	}
+
 	static int selectedTextureIndex = -1;
 	// ImVec2(height, width)
 	ImVec2 buttonSize(125, 25);
@@ -179,11 +193,13 @@ void CUserInterface::RenderTerrainUI()
 			{
 				CWindow::Instance().SetBrushType(BRUSH_TYPE_TEXTURE);
 				CBaseTerrain::Instance().GetGeoMipGrid()->SetCurrentTextureIndex(iActualIndex);
-
 				m_iSelectedBtnIdx = 0;
-
 				lastSelectedTextureIndex = iActualIndex;
-				sys_err("iActualIndex: %d", iActualIndex);
+				CScreen::Instance().SetTextureEditMode(true);
+				if (CScreen::Instance().GetEditingMode())
+				{
+					CScreen::Instance().SetEditingMode(!false);
+				}
 			}
 		}
 
@@ -307,6 +323,7 @@ void CUserInterface::RenderSceneUI()
 	}
 
 	ImGui::Checkbox("Wireframe mode", &scene.bWireFrame);
+	ImGui::Checkbox("Render Character", &scene.bRenderChar);
 
 	if (ImGui::Button("Generate seed"))
 	{

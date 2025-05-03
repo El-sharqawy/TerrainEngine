@@ -60,6 +60,7 @@ CScreen::CScreen(GLint iVerticesNum)
 	m_iTerrainDepth = 0;
 	m_v3InterSectionPoint = SVector3Df(0.0f);
 	m_bEditingMode = false;
+	m_bEditingTextureMode = false;
 	m_fBrushRadius = 5.0f;
 	m_fBrushStrength = 5.0f;
 	m_iTerrainTexNum = 0;
@@ -788,21 +789,21 @@ void CScreen::SetCursorPosition(GLint iX, GLint iY, GLint hRes, GLint vRes)
 	ms_Ray.SetDirection(CCameraManager::Instance().GetCurrentCamera()->GetDirection(), 51200.0f);
 
 	//if (m_pTerrain->GetQuadList().GetRayTerrainIntersection(ms_Ray.GetStartPoint(), ms_Ray.GetEndPoint(), intersectionPoint))
-	if (GetEditingMode())
+	if (GetEditingMode() || GetTextureEditMode())
 	{
 		if (RaycastHeightmap(ms_Ray.GetStartPoint(), ms_Ray.GetDirection(), m_v3InterSectionPoint))
 		{
+			m_bTerrainRayIntersection = true;
 			CBaseTerrain::Instance().GetTerrainShader()->Use();
 			CBaseTerrain::Instance().GetTerrainShader()->setVec3("u_HitPosition", m_v3InterSectionPoint);
 			CBaseTerrain::Instance().GetTerrainShader()->setFloat("u_HitRadius", m_fBrushRadius);
-			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", true);				// enable hit visualization
-			m_bTerrainRayIntersection = true;
+			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", m_bTerrainRayIntersection);				// enable hit visualization
 		}
 		else
 		{
-			CBaseTerrain::Instance().GetTerrainShader()->Use();
-			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", false);			// enable hit visualization
 			m_bTerrainRayIntersection = false;
+			CBaseTerrain::Instance().GetTerrainShader()->Use();
+			CBaseTerrain::Instance().GetTerrainShader()->setBool("u_HasHit", m_bTerrainRayIntersection);			// enable hit visualization
 		}
 	}
 }
@@ -914,23 +915,23 @@ void CScreen::GetPickingPosition(float t, float* x, float* y, float* z)
 
 void CScreen::ApplyTerrainBrush(EBrushType eBrushType)
 {
-	if (GetEditingMode() && m_bTerrainRayIntersection )
+	if (GetEditingMode() && m_bTerrainRayIntersection)
 	{
 		// Just pass the exact world coordinates — no grid conversion here
 		if (eBrushType >= BRUSH_TYPE_UP && eBrushType <= BRUSH_TYPE_NOISE)
 		{
 			CBaseTerrain::Instance().GetGeoMipGrid()->ApplyTerrainBrush_World(eBrushType, m_v3InterSectionPoint.x, m_v3InterSectionPoint.z, m_fBrushRadius, m_fBrushStrength);
 		}
-		else
-		{
-			TBrushParams brush{};
-			brush.v2WorldPos = SVector2Df(m_v3InterSectionPoint.x, m_v3InterSectionPoint.z);
-			brush.fRadius = m_fBrushRadius;
-			brush.fStrength = 1.0f;
-			brush.fAlpha = 0.9f;
-			brush.iSelectedTextureIndex = CBaseTerrain::Instance().GetGeoMipGrid()->GetCurrentTextureIndex(); // G channel (for grass, e.g.)
-			CBaseTerrain::Instance().GetGeoMipGrid()->PaintSplatmap(brush);
-		}
+	}
+	else if (GetTextureEditMode() && m_bTerrainRayIntersection)
+	{
+		TBrushParams brush{};
+		brush.v2WorldPos = SVector2Df(m_v3InterSectionPoint.x, m_v3InterSectionPoint.z);
+		brush.fRadius = m_fBrushRadius;
+		brush.fStrength = 1.0f;
+		brush.fAlpha = 1.0f;
+		brush.iSelectedTextureIndex = CBaseTerrain::Instance().GetGeoMipGrid()->GetCurrentTextureIndex(); // G channel (for grass, e.g.)
+		CBaseTerrain::Instance().GetGeoMipGrid()->PaintSplatmap(brush);
 	}
 }
 
@@ -942,6 +943,16 @@ void CScreen::SetEditingMode(bool bActive)
 bool CScreen::GetEditingMode() const
 {
 	return (m_bEditingMode);
+}
+
+void CScreen::SetTextureEditMode(bool bActive)
+{
+	m_bEditingTextureMode = bActive;
+}
+
+bool CScreen::GetTextureEditMode() const
+{
+	return (m_bEditingTextureMode);
 }
 
 void CScreen::SetBrushRadius(float fVal)

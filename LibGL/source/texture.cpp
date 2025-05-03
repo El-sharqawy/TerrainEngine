@@ -345,8 +345,8 @@ GLuint CTexture::GenerateEmptyTexture2D(GLint iWidth, GLint iHeight, GLint iText
 
 	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glBindTexture(m_eTextureTarget, 0);
 
 	return (m_uiTextureID);
@@ -361,8 +361,8 @@ GLuint CTexture::GenerateColoredTexture2D(GLint iWidth, GLint iHeight, const SVe
 	glTexImage2D(m_eTextureTarget, 0, GL_RGBA8, iWidth, iHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
 
 	// Step 2: Set texture parameters
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 

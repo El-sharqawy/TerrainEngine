@@ -73,6 +73,9 @@ public: // terrrain
 	void SetEditingMode(bool bActive);
 	bool GetEditingMode() const;
 
+	void SetTextureEditMode(bool bActive);
+	bool GetTextureEditMode() const;
+
 	void SetBrushRadius(float fVal);
 	float GetBrushRadius() const;
 	void SetBrushStrength(float fVal);
@@ -104,8 +107,7 @@ private:
 	GLint m_iTerrainWidth;
 	GLint m_iTerrainDepth;
 	bool m_bEditingMode;
-	bool m_bTerrainBrush;
-	bool m_bTerrainTextureBrush;
+	bool m_bEditingTextureMode;
 
 	SVector3Df m_v3InterSectionPoint;
 	GLfloat m_fBrushRadius;

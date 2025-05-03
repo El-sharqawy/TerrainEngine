@@ -145,6 +145,7 @@ public:
 	void PaintBrushOnSinglePatch(const TBrushParams& brush, int iPatchIndex);
 	glm::ivec2 GetPatchIndexFromWorldPos2D(glm::vec2 worldPos);
 	int GetPatchLinearIndex(int px, int py);
+	bool BrushIntersectsPatch(int patchIndex, const TBrushParams& brush);
 
 private:
 	std::vector<CTexture*> m_vIndexMaps;    // GL_RGBA32UI textures

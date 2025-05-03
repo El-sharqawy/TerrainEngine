@@ -68,6 +68,8 @@ private:
 	std::array<bool, 1024> m_bKeyBools;
 	CCamera* m_pCamera;
 	CFrameBuffer* m_pFrameBufObj;
+	GLfloat m_fBrushInterval;	// Time interval in seconds for brush application
+	GLfloat m_fBrushTimer;		// Timer to track elapsed time
 
 	EBrushType m_eBrushType;
 };
