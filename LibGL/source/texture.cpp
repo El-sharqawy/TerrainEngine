@@ -329,15 +329,22 @@ GLuint CTexture::GenerateTexture2D(GLint iWidth, GLint iHeight)
 	return (m_uiTextureID);
 }
 
-GLuint CTexture::GenerateEmptyTexture2D(GLint iWidth, GLint iHeight)
+GLuint CTexture::GenerateEmptyTexture2D(GLint iWidth, GLint iHeight, GLint iTextureType)
 {
 	glGenTextures(1, &m_uiTextureID);
 	glBindTexture(m_eTextureTarget, m_uiTextureID);
 
-	glTexImage2D(m_eTextureTarget, 0, GL_RGBA8, iWidth, iHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
+	if (iTextureType == GL_RGBA32UI)
+	{
+		glTexImage2D(m_eTextureTarget, 0, iTextureType, iWidth, iHeight, 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT, nullptr);
+	}
+	else
+	{
+		glTexImage2D(m_eTextureTarget, 0, iTextureType, iWidth, iHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
+	}
 
-	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(m_eTextureTarget, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(m_eTextureTarget, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glBindTexture(m_eTextureTarget, 0);
@@ -503,6 +510,15 @@ void CTexture::CreateBindlessTextureDSA(void* pImageData)
 	GLfloat maxAniso = 0.0f;
 	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
 	glTextureParameterf(m_uiTextureID, GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
+}
+
+void CTexture::UploadFloatRGBA(const SVector4Df* data)
+{
+	if (m_uiTextureID)
+	{
+		glBindTexture(GL_TEXTURE_2D, m_uiTextureID);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_iWidth, m_iHeight, 0, GL_RGBA, GL_FLOAT, data);
+	}
 }
 
 /////////////////////// TEXTURESET /////////////////////

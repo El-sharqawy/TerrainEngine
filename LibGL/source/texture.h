@@ -76,7 +76,7 @@ public:
 
 	GLuint GenerateTexture2D(GLint iWidth, GLint iHeight);
 	GLuint GenerateTexture3D(GLint iWidth, GLint iHeight, GLint iDepth);
-	GLuint GenerateEmptyTexture2D(GLint iWidth, GLint iHeight);
+	GLuint GenerateEmptyTexture2D(GLint iWidth, GLint iHeight, GLint iTextureType);
 	GLuint GenerateColoredTexture2D(GLint iWidth, GLint iHeight, const SVector4Df& v4Color);
 
 	void BindTexture2D(GLuint iUnit);
@@ -84,6 +84,9 @@ public:
 
 	void MakeResident();
 	void MakeNonResident();
+
+	void UploadFloatRGBA(const SVector4Df* data);
+
 
 private:
 	void LoadInternal(void* pImageData);

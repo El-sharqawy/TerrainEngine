@@ -31,12 +31,19 @@ typedef struct SPatchSplatBinding
 	}
 } TPatchSplatBinding;
 
+struct TSplatLayer
+{
+	GLubyte bTextureIndex;
+	GLfloat fWeight;
+};
+
 typedef struct SBrushParams
 {
 	SVector2Df v2WorldPos;			// Brush center (X, Z)
 	GLfloat fRadius;				// Brush radius
 	GLfloat fStrength;				// Paint intensity [0-1]
-	GLint iSelectedTexChannel;		// 0=R, 1=G, 2=B, 3=A
+	GLint iSelectedTextureIndex;	// 0=R, 1=G, 2=B, 3=A
+	GLfloat fAlpha = 1.0f; // Add this
 } TBrushParams;
 
 class CGeoMipGrid
@@ -75,6 +82,7 @@ public:
 	GLint GetNumPatchesX() const;
 	GLint GetNumPatchesZ() const;
 	GLint GetCurrentTextureIndex() const;
+	GLuint GetCurrentTexture() const;
 
 	void ApplyTerrainBrush_World(EBrushType eBrushType, GLfloat worldX, GLfloat worldZ, GLfloat fRadius, GLfloat fStrength);
 	void UpdateNormals();
@@ -106,6 +114,7 @@ private:
 	GLuint m_uiVBO; // Vertex Buffer Object
 	GLuint m_uiIdxBuf; // Index Buffer
 	GLint m_iCurTextureIndex;
+	GLint m_iSplatTexResolution;
 
 	std::vector<TLodInfo> m_vLodInfo;
 	GLint m_iMaxLOD;
@@ -119,15 +128,29 @@ private:
 
 // SplatData Implementation
 public:
+	struct TSplatData
+	{
+		std::vector<glm::uvec4> indexData;  // Texture indices (per texel)
+		std::vector<glm::vec4> weightData;   // Blending weights (per texel)
+	};
+
 	void SetupSplatTextures();
 	void UploadSplatBindings();
 	void PaintSplatmap(EBrushType eBrushType, const TBrushParams& brush);
 	void UploadSplatmapToGPU(GLint iPatchIndex);
+	void PaintSplatmap(const TBrushParams& brush);
+	float SmoothBrushFalloff(float dist, float radius, float hardness = 0.8f);
+	glm::vec2 GetPatchOrigin(int patchIndex) const;
+	void ResetAllSplatmapsToBaseTexture();
+	void PaintBrushOnSinglePatch(const TBrushParams& brush, int iPatchIndex);
+	glm::ivec2 GetPatchIndexFromWorldPos2D(glm::vec2 worldPos);
+	int GetPatchLinearIndex(int px, int py);
 
 private:
-	std::vector<TPatchSplatBinding> m_vSplatBindings;	//
-	std::vector<CTexture*> m_vSplatGLTextures;			// OpenGL texture IDs for splatmaps
-	std::vector<std::vector<SVector4Df>> m_vSplatData;	// CPU-side splatmap data
-	GLuint m_uiSplatTerrainHandlesSSBO;					// Shader Storage Buffer Object
+	std::vector<CTexture*> m_vIndexMaps;    // GL_RGBA32UI textures
+	std::vector<CTexture*> m_vWeightMaps;   // GL_RGBA32F textures
+	std::vector<TSplatData> m_vSplatData;   // CPU-side data
+	GLuint m_uiSplatIndexHandlesSSBO;		// SSBO for texture handles
+	GLuint m_uiSplatWeightHandlesSSBO;		// SSBO for texture handles
 
 };

@@ -150,9 +150,12 @@ void CBaseTerrain::Render()
 
 	// Bind SSBO to index 0
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_uiTerrainHandlesSSBO);
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
 	// Render geometry
 	m_pGeoMapGrid->Render(rCamera->GetPosition(), rCamera->GetViewProjMatrix());
+	glDisable(GL_BLEND);
 
 	// Unbind SSBO from index 0
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0); // Critical for safety
@@ -328,7 +331,7 @@ void CBaseTerrain::DoBindlesslyTexturesSetup()
 {
 	m_vTextureHandles.clear();
 
-	// Collect handles from loaded textures
+	// Collect all texture handles (including eraser at index 0)
 	for (auto& tex : ms_pTerrainTextureSet->GetTextures())
 	{
 		if (tex.m_pTexture)
@@ -342,8 +345,4 @@ void CBaseTerrain::DoBindlesslyTexturesSetup()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uiTerrainHandlesSSBO);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, m_vTextureHandles.size() * sizeof(GLuint64), m_vTextureHandles.data(), GL_STATIC_READ);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_uiTerrainHandlesSSBO);
-
-	// After creating SSBO
-	GLuint64* handles = static_cast<GLuint64*>(glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY));
-	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 }

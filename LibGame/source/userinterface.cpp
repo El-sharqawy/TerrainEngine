@@ -147,7 +147,7 @@ void CUserInterface::RenderTerrainUI()
 
 	// Create list of texture names for the ListBox
 	std::vector<const char*> textureNames;
-	for (size_t i = 0; i < CBaseTerrain::Instance().GetTextureSet()->GetTexturesCount()-1; i++) // Currently Limited to only 4 textures, TODO : make it unlimited !
+	for (size_t i = 0; i < CBaseTerrain::Instance().GetTextureSet()->GetTexturesCount(); i++) // Currently Limited to only 4 textures, TODO : make it unlimited !
 	{
 		if (i == 0)
 		{

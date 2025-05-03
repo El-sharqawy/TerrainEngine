@@ -24,6 +24,9 @@ CGeoMipGrid::CGeoMipGrid()
 	m_pTerrain = nullptr;
 	m_fWorldScale = 1.0f;
 	m_iCurTextureIndex = 0;
+	m_uiSplatIndexHandlesSSBO = 0;		// SSBO for texture handles
+	m_uiSplatWeightHandlesSSBO = 0;		// SSBO for texture handles
+	m_iSplatTexResolution = 128 + 128;
 }
 
 CGeoMipGrid::~CGeoMipGrid()
@@ -45,9 +48,24 @@ void CGeoMipGrid::Destroy()
 	{
 		glDeleteBuffers(1, &m_uiIdxBuf);
 	}
+	if (m_uiSplatIndexHandlesSSBO)
+	{
+		glDeleteBuffers(1, &m_uiSplatIndexHandlesSSBO);
+	}
+	if (m_uiSplatWeightHandlesSSBO)
+	{
+		glDeleteBuffers(1, &m_uiSplatWeightHandlesSSBO);
+	}
 
 	// Clear Splats Data
-	for (auto& tex : m_vSplatGLTextures)
+	for (auto& tex : m_vIndexMaps)
+	{
+		if (tex)
+		{
+			safe_delete(tex);
+		}
+	}
+	for (auto& tex : m_vWeightMaps)
 	{
 		if (tex)
 		{
@@ -55,8 +73,8 @@ void CGeoMipGrid::Destroy()
 		}
 	}
 
-	m_vSplatBindings.clear();
-	m_vSplatGLTextures.clear();
+	m_vIndexMaps.clear();
+	m_vWeightMaps.clear();
 	m_vSplatData.clear();
 }
 
@@ -105,6 +123,7 @@ void CGeoMipGrid::CreateGeoMipGrid(GLint iWidth, GLint iDepth, GLint iPatchSize,
 	PopulateBuffers(pTerrain);
 	SetupSplatTextures();
 	UploadSplatBindings();
+	ResetAllSplatmapsToBaseTexture();
 
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -282,6 +301,7 @@ void CGeoMipGrid::TVertex::InitVertex(CBaseTerrain* pTerrain, GLint x, GLint z)
 	const float TextureScale = pTerrain->GetTextureScale();
 	const float fXCoord = TextureScale * x / fSize;
 	const float fzCoord = TextureScale * z / fSize;
+
 	m_v2TexCoords = SVector2Df(fXCoord, fzCoord);
 	m_v3Normals = SVector3Df(0.0f);
 }
@@ -507,7 +527,8 @@ void CGeoMipGrid::Render()
 	CLodManager::Instance().Update();
 
 	// Bind SSBO to index 0
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatTerrainHandlesSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatIndexHandlesSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_uiSplatWeightHandlesSSBO);
 
 	glBindVertexArray(m_uiVAO);
 
@@ -543,6 +564,7 @@ void CGeoMipGrid::Render()
 	glBindVertexArray(0);
 	// Unbind SSBO to index 1
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, 0);
 
 }
 
@@ -559,7 +581,7 @@ void CGeoMipGrid::Render(const SVector3Df& CameraPos, const CMatrix4Df& ViewProj
 	SFrustumCulling sFC(ViewProj);
 
 	// Bind SSBO to index 0
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatTerrainHandlesSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatIndexHandlesSSBO);
 
 	glBindVertexArray(m_uiVAO);
 	// Set tessellation levels, you may want to adjust these based on your LOD (level of detail)
@@ -591,12 +613,8 @@ void CGeoMipGrid::Render(const SVector3Df& CameraPos, const CMatrix4Df& ViewProj
 			m_pTerrain->GetTerrainShader()->Use();
 			m_pTerrain->GetTerrainShader()->setInt("iLodLevel", iCore);
 			m_pTerrain->GetTerrainShader()->setInt("iLodLevelMax", m_iMaxLOD);
-
-			glActiveTexture(GL_TEXTURE0 + COLOR_TEXTURE_UNIT_INDEX_5);
-			glBindTexture(GL_TEXTURE_2D, m_vSplatGLTextures[iPatchIndex]->GetTextureID());
-
-			m_pTerrain->GetTerrainShader()->setInt("splatmap", COLOR_TEXTURE_UNIT_INDEX_5);             // bind sampler
 			m_pTerrain->GetTerrainShader()->setInt("iPatchIndex", iPatchIndex); // for bindless IDs
+			m_pTerrain->GetTerrainShader()->setVec2("numPatches", glm::vec2(m_iNumPatchesX, m_iNumPatchesZ)); // for bindless IDs
 
 			size_t sBaseIndex = sizeof(GLuint) * m_vLodInfo[iCore].LodInfo[iLeft][iRight][iTop][iBottom].iStart;
 
@@ -729,6 +747,19 @@ GLint CGeoMipGrid::GetNumPatchesZ() const
 GLint CGeoMipGrid::GetCurrentTextureIndex() const
 {
 	return m_iCurTextureIndex;
+}
+
+GLuint CGeoMipGrid::GetCurrentTexture() const
+{
+	if (CBaseTerrain::Instance().GetTextureSet())
+	{
+		if (CBaseTerrain::Instance().GetTextureSet()->GetTexture(m_iCurTextureIndex).m_pTexture)
+		{
+			return CBaseTerrain::Instance().GetTextureSet()->GetTexture(m_iCurTextureIndex).m_pTexture->GetTextureID();
+		}
+	}
+
+	return 0;
 }
 
 void CGeoMipGrid::ApplyTerrainBrush_World(EBrushType eBrushType, GLfloat worldX, GLfloat worldZ, GLfloat fRadius, GLfloat fStrength)
@@ -901,89 +932,181 @@ GLint CGeoMipGrid::GetPatchIndexFromWorldPos(const SVector2Df& v2WorldPos) const
 /// Splat map Implementation
 void CGeoMipGrid::SetupSplatTextures()
 {
-	const GLint iSplatResolution = 64; // Resolution per patch
-	const GLint iNumPatches = m_iNumPatchesX * m_iNumPatchesZ;
+    const GLint iNumPatches = m_iNumPatchesX * m_iNumPatchesZ;
+    const GLint iSplatRes = m_iSplatTexResolution;
 
-	m_vSplatBindings.resize(iNumPatches);
-	m_vSplatGLTextures.resize(iNumPatches);
-	m_vSplatData.resize(iNumPatches);
+    m_vIndexMaps.resize(iNumPatches);
+    m_vWeightMaps.resize(iNumPatches);
+    m_vSplatData.resize(iNumPatches);
 
-	for (GLint i = 0; i < iNumPatches; i++)
-	{
-		m_vSplatData[i].resize(iSplatResolution * iSplatResolution, SVector4Df(0.0f));
+    for (GLint i = 0; i < iNumPatches; i++) {
+        // Index Map (unsigned int RGBA32UI)
+        m_vIndexMaps[i] = new CTexture(GL_TEXTURE_2D);
+        m_vIndexMaps[i]->GenerateEmptyTexture2D(iSplatRes, iSplatRes, GL_RGBA32UI);
+		m_vIndexMaps[i]->MakeResident();
 
-		m_vSplatBindings[i].iTextureIndices[0] = 0;
-		m_vSplatBindings[i].iTextureIndices[1] = 1;
-		m_vSplatBindings[i].iTextureIndices[2] = 2;
-		m_vSplatBindings[i].iTextureIndices[3] = 3;
+        // Weight Map (float RGBA32F)
+        m_vWeightMaps[i] = new CTexture(GL_TEXTURE_2D);
+        m_vWeightMaps[i]->GenerateEmptyTexture2D(iSplatRes, iSplatRes, GL_RGBA32F);
+		m_vWeightMaps[i]->MakeResident();
 
-		m_vSplatGLTextures[i] = new CTexture(GL_TEXTURE_2D);
-		m_vSplatGLTextures[i]->GenerateEmptyTexture2D(iSplatResolution, iSplatResolution);
-	}
+        // Initialize CPU data
+        m_vSplatData[i].indexData.resize(iSplatRes * iSplatRes, glm::uvec4(0));
+        m_vSplatData[i].weightData.resize(iSplatRes * iSplatRes, glm::vec4(0.0f));
+    }
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void CGeoMipGrid::UploadSplatBindings()
 {
-	if (!m_uiSplatTerrainHandlesSSBO)
+	// SSBO #1: index-map handles
+	if (!m_uiSplatIndexHandlesSSBO)
 	{
-		glGenBuffers(1, &m_uiSplatTerrainHandlesSSBO);
+		glGenBuffers(1, &m_uiSplatIndexHandlesSSBO);
 	}
 
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uiSplatTerrainHandlesSSBO);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, m_vSplatBindings.size() * sizeof(TPatchSplatBinding), m_vSplatBindings.data(), GL_STATIC_DRAW);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatTerrainHandlesSSBO);
+	std::vector<GLuint64> IndexHandles;
+	for (auto* t : m_vIndexMaps)
+	{
+		IndexHandles.push_back(t->GetHandle());
+	}
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uiSplatIndexHandlesSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, IndexHandles.size() * sizeof(GLuint64), IndexHandles.data(), GL_DYNAMIC_DRAW); 	// Indices + weights
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uiSplatIndexHandlesSSBO); // Binding point 1
+
+	// SSBO #2: weight-map handles
+	glGenBuffers(1, &m_uiSplatWeightHandlesSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uiSplatWeightHandlesSSBO);
+	std::vector<GLuint64> weightHandles;
+	for (auto* t : m_vWeightMaps)
+	{
+		weightHandles.push_back(t->GetHandle());
+	}
+	glBufferData(GL_SHADER_STORAGE_BUFFER, weightHandles.size() * sizeof(GLuint64), weightHandles.data(), GL_STATIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_uiSplatWeightHandlesSSBO);
+
 }
 
-void CGeoMipGrid::PaintSplatmap(EBrushType brushType, const TBrushParams& brush)
+void CGeoMipGrid::PaintSplatmap(const TBrushParams& brush)
 {
-	const GLint iSplatResolution = 64; // Resolution per patch
-	const GLfloat fTexelSize = (m_iPatchSize * m_fWorldScale) / iSplatResolution;
-	const GLint iPatchIndex = GetPatchIndexFromWorldPos(brush.v2WorldPos);
-	const SVector2Df v2WorldPos = brush.v2WorldPos; // Must be in terrain world units (not grid)
+	const float radius = brush.fRadius;
 
-	// Calcualte Patch Origin
-	GLint iPatchX = iPatchIndex % m_iNumPatchesX;
-	GLint iPatchZ = iPatchIndex / m_iNumPatchesX;
-	SVector2Df v2PatchOrigin = SVector2Df(iPatchX * m_iPatchSize * m_fWorldScale, iPatchZ * m_iPatchSize * m_fWorldScale);
+	// Determine which patches intersect the brush
+	const glm::vec2 brushMin = glm::vec2(brush.v2WorldPos.x, brush.v2WorldPos.y) - glm::vec2(radius);
+	const glm::vec2 brushMax = glm::vec2(brush.v2WorldPos.x, brush.v2WorldPos.y) + glm::vec2(radius);
 
-	auto& vSplatData = m_vSplatData[iPatchIndex];
+	const glm::ivec2 minPatch = GetPatchIndexFromWorldPos2D(brushMin); // returns (x, y)
+	const glm::ivec2 maxPatch = GetPatchIndexFromWorldPos2D(brushMax);
 
-	for (GLint y = 0; y < iSplatResolution; y++)
+	for (int py = minPatch.y; py <= maxPatch.y; ++py)
 	{
-		for (GLint x = 0; x < iSplatResolution; x++)
+		for (int px = minPatch.x; px <= maxPatch.x; ++px)
 		{
-			SVector2Df v2TexelWorld = v2PatchOrigin + SVector2Df(x + 0.5f, y + 0.5f) * fTexelSize;
-			float fDist = (v2TexelWorld - v2WorldPos).length();
+			const int patchIndex = GetPatchLinearIndex(px, py);
+			if (patchIndex < 0 || patchIndex >= m_vSplatData.size())
+				continue;
 
-			if (fDist <= brush.fRadius)
+			PaintBrushOnSinglePatch(brush, patchIndex);
+		}
+	}
+}
+
+void CGeoMipGrid::PaintBrushOnSinglePatch(const TBrushParams& brush, int iPatchIndex)
+{
+	auto& patchData = m_vSplatData[iPatchIndex];
+	const GLint R = m_iSplatTexResolution;
+	const float worldScale = m_iPatchSize * m_fWorldScale;
+	const float fTexelSize = worldScale / R;
+	const float radius = brush.fRadius;
+	const float radiusTex = radius / fTexelSize;
+
+	// Calculate brush bounds with sub-texel precision
+	const glm::vec2 brushCenterWS(brush.v2WorldPos.x, brush.v2WorldPos.y);
+	const glm::vec2 patchOrigin = GetPatchOrigin(iPatchIndex);
+	const glm::vec2 localCenter = (brushCenterWS - patchOrigin) / fTexelSize;
+
+	const int x0 = std::max(0, static_cast<int>(floor(localCenter.x - radiusTex)));
+	const int x1 = std::min(R - 1, static_cast<int>(ceil(localCenter.x + radiusTex)));
+	const int y0 = std::max(0, static_cast<int>(floor(localCenter.y - radiusTex)));
+	const int y1 = std::min(R - 1, static_cast<int>(ceil(localCenter.y + radiusTex)));
+
+	// Pre-calculate brush parameters
+	const float innerRadius = radiusTex * 0.85f;
+	const float outerRadius = radiusTex;
+	const float radiusSq = outerRadius * outerRadius;
+
+	for (int y = y0; y <= y1; ++y)
+	{
+		for (int x = x0; x <= x1; ++x)
+		{
+			float dx = (x + 0.5f) - localCenter.x;
+			float dy = (y + 0.5f) - localCenter.y;
+			float dist = sqrtf(dx * dx + dy * dy);
+
+			float normDist = dist / (radius / fTexelSize);
+			if (normDist > 1.0f)
+				continue;
+
+			float t = glm::clamp(normDist, 0.0f, 1.0f); // 0=center, 1=edge
+
+			// Brush fade-out: alpha = 1 at center, 0 at edge
+			float falloff = 1.0f - t;
+			falloff = glm::smoothstep(1.0f, 0.0f, t);
+
+			float strength = brush.fStrength * falloff;
+
+			// NEW: total influence = how much to paint this texture here
+			float influence = brush.fAlpha * strength;  // allow partial blend
+
+			int idx = y * R + x;
+			auto& weights = patchData.weightData[idx];
+			auto& indices = patchData.indexData[idx];
+
+			// NEW: if texel is fully empty (sum == 0), initialize slot 0 with the selected texture
+			float totalW = weights.x + weights.y + weights.z + weights.w;
+			if (totalW < 1e-5f)
 			{
-				float fFallOff = 1.0f - (fDist / brush.fRadius);
-				fFallOff = MyMath::fclamp(fFallOff, 0.0f, 1.0f);
+				indices[0] = brush.iSelectedTextureIndex;
+				weights[0] = 0.0f;
+			}
 
-				GLint iIndex = y * iSplatResolution + x;
-				vSplatData[iIndex][brush.iSelectedTexChannel] = MyMath::fclamp(vSplatData[iIndex][brush.iSelectedTexChannel] + brush.fStrength * fFallOff, 0.0f, 1.0f);
-
-				// Normalize to ensure the sum of channels does not exceed 1.0
-				float fTotal = vSplatData[iIndex].r + vSplatData[iIndex].g + vSplatData[iIndex].b + vSplatData[iIndex].a;
-				if (fTotal > 1.0f)
+			// Find slot that matches selected texture, or pick lowest
+			int slot = -1;
+			for (int i = 0; i < 4; ++i)
+			{
+				if (indices[i] == brush.iSelectedTextureIndex)
 				{
-					// Reduce other channels proportionally
-					float overflow = fTotal - 1.0f;
-					for (int i = 0; i < 4; i++)
-					{
-						if (i != brush.iSelectedTexChannel)
-						{
-							vSplatData[iIndex][i] = std::max(0.0f, vSplatData[iIndex][i] - (overflow * vSplatData[iIndex][i] / fTotal));
-						}
-					}
-					vSplatData[iIndex][brush.iSelectedTexChannel] = 1.0f - (vSplatData[iIndex].r + vSplatData[iIndex].g + vSplatData[iIndex].b);
-				}
-				else if (fTotal < 0.0f)
-				{
-					vSplatData[iIndex] = SVector4Df(0.0f);
+					slot = i;
+					break;
 				}
 			}
+			if (slot == -1)
+			{
+				// No match — replace the least used slot
+				slot = 0;
+				float minW = weights[0];
+				for (int i = 1; i < 4; ++i) if (weights[i] < minW) { minW = weights[i]; slot = i; }
+				indices[slot] = brush.iSelectedTextureIndex;
+			}
+
+			// Soft blend: increase selected weight, fade others
+			for (int i = 0; i < 4; ++i)
+			{
+				if (i == slot)
+				{
+					weights[i] = glm::mix(weights[i], 1.0f, influence); // fade in
+				}
+				else
+				{
+					weights[i] = glm::mix(weights[i], 0.0f, influence); // fade out
+				}
+			}
+
+			// Normalize
+			float sum = weights.x + weights.y + weights.z + weights.w;
+			if (sum > 1e-5f)
+				weights /= sum;
 		}
 	}
 
@@ -992,7 +1115,56 @@ void CGeoMipGrid::PaintSplatmap(EBrushType brushType, const TBrushParams& brush)
 
 void CGeoMipGrid::UploadSplatmapToGPU(GLint iPatchIndex)
 {
-	const GLint iSplatResolution = 64; // Resolution per patch
-	glBindTexture(GL_TEXTURE_2D, m_vSplatGLTextures[iPatchIndex]->GetTextureID());
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, iSplatResolution, iSplatResolution, GL_RGBA, GL_FLOAT, m_vSplatData[iPatchIndex].data());
+	const GLint iSplatResolution = m_iSplatTexResolution; // Resolution per patch
+
+	// Upload index map
+	glBindTexture(GL_TEXTURE_2D, m_vIndexMaps[iPatchIndex]->GetTextureID());
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, iSplatResolution, iSplatResolution, GL_RGBA_INTEGER, GL_UNSIGNED_INT, m_vSplatData[iPatchIndex].indexData.data());
+
+	// Upload weight map
+	glBindTexture(GL_TEXTURE_2D, m_vWeightMaps[iPatchIndex]->GetTextureID());
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, iSplatResolution, iSplatResolution, GL_RGBA, GL_FLOAT, m_vSplatData[iPatchIndex].weightData.data());
+}
+
+float CGeoMipGrid::SmoothBrushFalloff(float dist, float radius, float hardness)
+{
+	float edge = radius * (1.0f - hardness);
+	return 1.0f - glm::smoothstep(radius - edge, radius, dist);
+}
+
+glm::vec2 CGeoMipGrid::GetPatchOrigin(int patchIndex) const
+{
+	const int px = patchIndex % m_iNumPatchesX;
+	const int pz = patchIndex / m_iNumPatchesX;
+	return glm::vec2(px, pz) * float(m_iPatchSize) * m_fWorldScale;
+}
+
+void CGeoMipGrid::ResetAllSplatmapsToBaseTexture()
+{
+	for (auto& patchData : m_vSplatData)
+	{
+		const int texelCount = m_iSplatTexResolution * m_iSplatTexResolution;
+		for (int i = 0; i < texelCount; ++i)
+		{
+			patchData.indexData[i] = glm::uvec4(0, 0, 0, 0);
+			patchData.weightData[i] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+		}
+	}
+
+	for (int i = 0; i < m_vSplatData.size(); ++i)
+		UploadSplatmapToGPU(i);
+}
+
+glm::ivec2 CGeoMipGrid::GetPatchIndexFromWorldPos2D(glm::vec2 worldPos)
+{
+	glm::vec2 localPos = worldPos / (m_iPatchSize * m_fWorldScale);
+	return glm::ivec2(floor(localPos.x), floor(localPos.y));
+}
+
+int CGeoMipGrid::GetPatchLinearIndex(int px, int py)
+{
+	if (px < 0 || py < 0 || px >= m_iNumPatchesX || py >= m_iNumPatchesZ)
+		return -1;
+
+	return py * m_iNumPatchesX + px;
 }

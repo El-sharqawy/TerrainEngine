@@ -38,7 +38,7 @@ void CTerrainTextureSet::AddEmptyTexture()
 {
 	TTerrainTexture EraserTexture;
 	EraserTexture.m_pTexture = new CTexture(GL_TEXTURE_2D);
-	EraserTexture.m_pTexture->GenerateColoredTexture2D(TERRAIN_PATCH_SIZE, TERRAIN_PATCH_SIZE, SVector4Df(0.0f));
+	EraserTexture.m_pTexture->GenerateColoredTexture2D(TERRAIN_PATCH_SIZE, TERRAIN_PATCH_SIZE, SVector4Df(0.0f, 1.0f, 0.3f, 0.1f));
 	EraserTexture.m_pTexture->MakeResident();
 	m_vTextures.emplace_back(EraserTexture);
 }

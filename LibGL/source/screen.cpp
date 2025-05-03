@@ -927,8 +927,9 @@ void CScreen::ApplyTerrainBrush(EBrushType eBrushType)
 			brush.v2WorldPos = SVector2Df(m_v3InterSectionPoint.x, m_v3InterSectionPoint.z);
 			brush.fRadius = m_fBrushRadius;
 			brush.fStrength = 1.0f;
-			brush.iSelectedTexChannel = CBaseTerrain::Instance().GetGeoMipGrid()->GetCurrentTextureIndex(); // G channel (for grass, e.g.)
-			CBaseTerrain::Instance().GetGeoMipGrid()->PaintSplatmap(eBrushType, brush);
+			brush.fAlpha = 0.9f;
+			brush.iSelectedTextureIndex = CBaseTerrain::Instance().GetGeoMipGrid()->GetCurrentTextureIndex(); // G channel (for grass, e.g.)
+			CBaseTerrain::Instance().GetGeoMipGrid()->PaintSplatmap(brush);
 		}
 	}
 }
